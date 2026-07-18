@@ -1,0 +1,7 @@
+# ignore binary
+*.bin
+*.o
+*.elf
+
+# ignore temp files
+target/
