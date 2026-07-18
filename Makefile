@@ -9,3 +9,6 @@ run:
 
 clean:
 	rm -f target/*.bin
+
+kill:
+	pkill -f qemu-system-x86_64
