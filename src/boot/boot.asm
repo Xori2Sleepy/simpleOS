@@ -1,6 +1,7 @@
 [bits 16]   
 [org 0x7c00]
 ; basic stage one bootloader, really small and basic
+; somehow it smaller than i expected even with the long string
 start:
     cli
     mov     [boot_drive], dl
@@ -16,17 +17,19 @@ start:
     ; printing message, here for testing
     mov     si, msg
     call    print_loop
+    mov     al, 10              ; nl
+    call    print_char
 
 sector_load:
     dec     byte [counter]      ; if re attempt too many time, halt the cpu
     jz      halt
 
+    mov     bx, 0x7E00
     mov     ah, 02h             ; read sector (CHS)
     mov     al, [sector2read]   ; # of sectors to read
     mov     ch, 0               ; cylinder 0
     mov     cl, 2               ; read start from sector 2
     mov     dh, 0               ; head 0 
-    mov     bx, 0x7E00          ; should be a save memory zone for second stage
     mov     dl, [boot_drive]
 
     int     13h                 ; bios disk service
@@ -38,14 +41,9 @@ sector_load:
 .success:
     mov     si, msg_disk_sc
     call    print_loop
-    jmp     0x7E00              ; jmp to second stage bootloader!
+    jmp     0000:0x7E00              ; jmp to second stage bootloader!
 
 disk_error:
-    push    ax
-    mov     al, [counter]
-    add     al, '0'
-    call    print_char
-    pop     ax
 
     mov     si, msg_disk_er
     call    print_loop          ; print error message
@@ -63,6 +61,9 @@ disk_error:
     xlat
     call    print_char
 
+    mov     al, 10              ; nl
+    call    print_char
+
     xor     ax, ax              ; error code gone, ax = 0 for disk reset
     mov     dl, [boot_drive]
     int     0x13                ; call bios to reset controller
@@ -75,13 +76,16 @@ disk_error:
 
 halt:
     mov     si, msg_halt
+    call    print_loop
+.halt_loop
     cli
     hlt
-    jmp     halt
+    jmp     .halt_loop
 ; ---------- function ----------  
 ; general purpose function
 print_char:
-    ; need al
+    ; input regs: need ASCII # in al
+    ; clobbered regs: NA
     pusha
     mov     ah, 0x0E
     int     0x10
@@ -89,31 +93,32 @@ print_char:
     ret
 
 print_loop:
-    ; need pointer in si
+    ; input regs: need pointer in si
+    ; clobbered regs: NA
     pusha
     cld                         ; we uses lodsb to print stuff so we need to clear df. Just to make sure!
 .loop:
-    ; a universal function, this print message in si!
     lodsb                       ; Load next byte from SI into AL
     cmp     al, 0
     je      .done
     call    print_char          ; BIOS teletype function
     jmp     .loop
 .done: 
-    mov     al, 10              ; nl
-    call    print_char
     popa
     ret
 
 counter     db      4
 boot_drive  db      0
-msg         db      "Bootloader loaded! Attemp to load the second stage bootloader...", 0
+msg         db      "Bootloader loaded! Attemp to load the second stage bootloader...", 10, 0
 msg_disk_er db      "Disk read error! Error code: ", 0 
-msg_disk_sc db      "Disk read success! Starting second stage bootloader...", 0
-msg_rs_fail db      "Fatal Error: Disk controller reset fail!", 0
-msg_halt    db      "CPU halting...", 0
+msg_disk_sc db      "Disk read success! Starting second stage bootloader...", 10, 0
+msg_rs_fail db      "Fatal Error: Disk controller reset fail!", 10, 0
+msg_halt    db      "CPU halting...", 10, 0
 hex_map     db      "0123456789ABCDEF"      ; it used for xlat
-sector2read db      1                       ; a magic number, number of sector to read!
+sector2read db      8                       ; a magic number, number of sector to read!
+                                            ; technically this is hardcoded as it depend on the 
+                                            ; second stage to fill enoguht space or shit wont load sector properly
+                                            ; but i am too lazy to implement some dynamic memory fill or whatever
 
 times 510-($-$$) db 0 ; fill the rest with 0
 dw 0xaa55
