@@ -19,6 +19,7 @@ start:
     mov     si, msg
     call    print_loop
     call    enable_a20
+    call    halt                ; just here for now because my other features is not implemented yet!
 
 enable_a20:
     ; for some reason all the website out there make it look like this is some scary as hell process,
