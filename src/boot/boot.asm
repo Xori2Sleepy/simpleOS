@@ -61,7 +61,9 @@ disk_error:
     xlat
     call    print_char
 
-    mov     al, 10              ; nl
+    mov     al, 13              ; line feed
+    call    print_char
+    mov     al, 10              ; NL
     call    print_char
 
     xor     ax, ax              ; error code gone, ax = 0 for disk reset
@@ -86,16 +88,17 @@ halt:
 print_char:
     ; input regs: need ASCII # in al
     ; clobbered regs: NA
-    pusha
+    push    ax
     mov     ah, 0x0E
     int     0x10
-    popa
+    pop     ax
     ret
 
 print_loop:
     ; input regs: need pointer in si
     ; clobbered regs: NA
-    pusha
+    pushf
+    push    ax
     cld                         ; we uses lodsb to print stuff so we need to clear df. Just to make sure!
 .loop:
     lodsb                       ; Load next byte from SI into AL
@@ -104,16 +107,17 @@ print_loop:
     call    print_char          ; BIOS teletype function
     jmp     .loop
 .done: 
-    popa
+    pop     ax
+    popf
     ret
 
 counter     db      4
 boot_drive  db      0
-msg         db      "Bootloader loaded! Attemp to load the second stage bootloader...", 10, 0
+msg         db      "Bootloader loaded! Attemp to load the second stage bootloader...", 13, 10, 0
 msg_disk_er db      "Disk read error! Error code: ", 0 
-msg_disk_sc db      "Disk read success! Starting second stage bootloader...", 10, 0
-msg_rs_fail db      "Fatal Error: Disk controller reset fail!", 10, 0
-msg_halt    db      "CPU halting...", 10, 0
+msg_disk_sc db      "Disk read success! Starting second stage bootloader...", 13, 10, 0
+msg_rs_fail db      "Fatal Error: Disk controller reset fail!", 13, 10, 0
+msg_halt    db      "CPU halting...", 13, 10, 0
 hex_map     db      "0123456789ABCDEF"      ; it used for xlat
 sector2read db      8                       ; a magic number, number of sector to read!
                                             ; technically this is hardcoded as it depend on the 

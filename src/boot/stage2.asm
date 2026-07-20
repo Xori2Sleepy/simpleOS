@@ -11,12 +11,14 @@ start:
     mov     sp, 0x7c00
     sti
 
-    mov     al, 10
+    mov     al, 13
     call    print_char          ; function doesnt clobbered anything, al resuable!
-    call    print_char          ; print NL to make thing pretty :D
+    mov     al, 10
+    call    print_char
+
     mov     si, msg
     call    print_loop
-    call    halt
+    call    enable_a20
 
 enable_a20:
     ; for some reason all the website out there make it look like this is some scary as hell process,
@@ -25,12 +27,16 @@ enable_a20:
     call    check_a20           ; alway check before anything
     jc      .a20_done
 
-    ; 1: try to enable a20, if failed retry
+    ; 1: try to enable a20 using the bios interrupt method.
     mov     ax, 2401h           ; function 2401h: Enable A20 GATE
     int     15h                 ; call misc system service apparently
-    call    check_a20
+    call    check_a20           ; doesnt clobbed ax (error code return from in t 15h)
     jc      .a20_done
-    
+    mov     si, msg_bios_a20_failed
+    call    print_error         ; args is error code in ah and string pointer in si
+    mov     si, msg_bios_a20_cont
+    call    print_loop
+
     ; 2: a fallback method incase bios a20 activation fail
     ; utilize i/o ports on CPU and ask keyboard controler to enable A20
     ; it kinda slow af, also i have never seen in and out instruction before so that cool
@@ -46,6 +52,8 @@ enable_a20:
     sti
     call    check_a20
     jc      .a20_done
+    mov     si, msg_kb_ctrl_failed
+    call    print_loop
 
     ; 3: fast port 92h, a modern and fast alternative to port 64h (keyboard controller)
     ; we also need to make sure bits 0 is off incase accidental hard reset
@@ -55,6 +63,8 @@ enable_a20:
     out     92h, al             ; write update to port
     call    check_a20
     jc      .a20_done
+    mov     si, msg_ff_failed
+    call    print_loop
 
     ; some other method but too obscue might break thing :( dont want to remove it though so it stay as comment
     ; 4: desperate time require desperate measure, fast and dirty 0EEh! (for 386SL / Geode)
@@ -67,13 +77,17 @@ enable_a20:
     ;out     61h, al
     ;call    check_a20
 
-.a20_failed
+.a20_failed:
     ; code will fall here naturally if a20 fail
     mov     si, msg_a20_failed
     call    print_loop
     call    halt
 
 .a20_done:
+    mov     si, msg_a20_success
+    call    print_loop
+    call    halt                ; here for now
+    
 
 ; ---------- functions ---------- 
 ; more specific function that MIGHT be useful in some other place
@@ -81,7 +95,7 @@ enable_a20:
 check_a20:
     ; input: NA
     ; output: carry flag, set mean a20 is on vise versa
-    ; clobbled: carry flag (potentially memory corruption but highly unlikely)
+    ; clobbled: carry flag (potentially memory corruption but highly unlikely), 
 
     ; principle is that higest possible address is 0xFFFF:0xFFFF which is 0xFFFF * 16 + 0xFFFF
     ; = 0x10FFF0, the cpu cant see that 10 in __FFEF so it it wrap to FFEF. We just have to write to some address
@@ -90,6 +104,7 @@ check_a20:
     ; then we write another stuff to 10500, if it unwrap our value should still be there, if it is wrap it will be overwrite
     ; with new value, we just have to compare the 0x500 with our new value, if equal than a20 not on
     pushf
+    push    ax
     push    si
     push    di
     push    ds
@@ -128,6 +143,7 @@ check_a20:
     pop     ds
     pop     di
     pop     si
+    pop     ax
     popf
     stc
     ret
@@ -136,13 +152,15 @@ check_a20:
     pop     es
     pop     ds
     pop     di
-    pop     si
+    pop     si 
+    pop     ax
     popf
     clc
     ret
 
     
 halt:
+    ; halt the cpu
     mov     si, msg_cpu_halted
     call    print_loop
 .halt_loop:
@@ -156,16 +174,16 @@ halt:
 print_char:
     ; input regs: need ASCII # in al
     ; clobbered regs: NA
-    pusha
+    push    ax
     mov     ah, 0x0E
     int     0x10
-    popa
+    pop     ax
     ret
 
 print_loop:
     ; input regs: need pointer in si
-    ; clobbered regs: NA
-    pusha
+    pushf
+    push    ax
     cld
 .loop:
     lodsb
@@ -174,11 +192,50 @@ print_loop:
     call    print_char
     jmp     .loop
 .done: 
-    popa
+    pop     ax
+    popf
     ret
 
+print_error:
+    ; input regs: pointer to error string in si
+    ;           : byte size error (hex) in ah
+    ; clobbered regs: NA
+    push    ax
+    push    bx
+    call    print_loop
+    
+    ; print first
+    mov     al, ah
+    shr     al, 4
+    mov     bx, hex_map
+    xlat
+    call    print_char
+    ; print second 
+    mov     al, ah
+    and     al, 0Fh
+    mov     bx, hex_map
+    xlat
+    call    print_char
+    ; print line feed and NL
+    mov     al, 13
+    call    print_char
+    mov     al, 10
+    call    print_char
+    
+    pop     bx
+    pop     ax
+    ret
 
-msg                 db      "Second Stage bootloader succesfully loaded! Attempting to enable A20...", 10, 0
-msg_a20_failed      db      "A20 can not be enable; system can not be safely load: Halting CPU!", 10, 0
-msg_cpu_halted      db      "CPU halted!", 10, 0
-times 4096-($-$$)   db      0.
+msg                 db      "Second Stage bootloader succesfully loaded! Attempting to enable A20...", 13, 10, 0
+msg_a20_success     db      "A20 successfully initialize! Attempting to build Global Descriptor Table...", 13, 10, 0
+msg_a20_failed      db      "CRITICAL: Attempted all reliable method. If you see this message, the only way to continue "
+                    db      "is to dig up the bootloader code and manually uncomment other method. Good Luck!", 13, 10, 0
+                    db      "CRITICAL: A20 can not be enable; system can not be safely load: Halting CPU!", 13, 10, 0
+msg_cpu_halted      db      "CRITICAL ERROR: CPU halted!", 13, 10, 0
+msg_bios_a20_failed db      "BIOS A20 initialization failed. Error code: ", 13, 10, 0
+msg_bios_a20_cont   db      "Attempt other known method for A20 initiation...", 13, 10, 0
+msg_kb_ctrl_failed  db      "Keyboard controller A20 initiation failed. Attmepting other known method...", 13, 10, 0
+msg_ff_failed       db      "System Control Port A A20 initiation failed!", 13, 10
+
+hex_map             db      "0123456789ABCDEF"
+times 4096-($-$$)   db      0
