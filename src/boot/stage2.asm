@@ -1,6 +1,16 @@
 [bits 16]
 [org 0x7E00]
 
+; input: base, limit, access bytes, flags
+%macro gdt_entries 4
+    dw      %2 & 0xFFFF         ; limit is 20 bits we only need first 16 here
+    dw      %1 & 0xFFFF         ; base is 32 bits but we only need first 16 here
+    db      (%1 >> 16) & 0xFF   ; we only need 16-23 bits
+    db      %3                  ; acess bytes
+    db      ((%4 & 0xF0) | ((%2 >> 16) & 0x0F)) ; first 4 bits is the 'other' flags, rest is limit
+    db      (%1 >> 24) & 0xFF   ; only need the last 8 bits
+%endmacro
+
 start:
     ; environmental setup, already did this in stage 1, but JUST TO MAKE SURE!
     cli
@@ -241,6 +251,7 @@ msg_ff_failed       db      "System Control Port A A20 initiation failed!", 13, 
 
 hex_map             db      "0123456789ABCDEF"
 
+
 gdt_start:
     ; lower limit -> 2 byte (16 bits - 0 - 15)
     ; lower base -> 3 byte (24 bits - 0 - 23)
@@ -258,59 +269,23 @@ gdt_start:
     ; other flags:
     ; 7 -> granularity = multiply memory by 4 kb and scale 20 bits limit to 32 bits (4gb)
     ; 6 -> D/B size/bigflags. if code then this control if it uses 32 bit protected or not, if data then stack pointer size
-    ; 5 -> long/64 bits flag. contain native 64 bits or nah?
+    ; 5 -> long/64 bits flag. 64 bits code?
     ; AVL -> avaliable flag, not used by CPU, for kernel
     ; 3-0 -> bit 16-19 of limit (MSB)
 
-    ; base bit -> extra byte for base (24-31) giving total of 34 bits
+    ; base bit -> extra byte for base (24-31) giving total of 32 bits
 
-    dq      0x0     ; null descriptor
-    
-    ; entries 1: 0x08 32 bits Kernel code segment descriptor
-    dw      0xFFFF
-    dw      0x0000
-    db      0x00
-    db      10011010b
-    db      11001111b
-    db      0x00
-
-    ; entries 2: 0x16 64 bits Kernel code segment descriptor
-    dw      0xFFFF
-    dw      0x0000
-    db      0x00
-    db      10011010b
-    db      10101111b
-    db      0x00
-
-    ; entries 3: 32 bits Kernel data segment descriptor
-    dw      0xFFFF
-    dw      0x0000
-    db      0x00
-    db      10010010b
-    db      11001111b
-    db      0x00
-
-    ; entries 3: User code segment descriptor
-    dw      0xFFFF
-    dw      0x0000
-    db      0x00
-    db      11111010b
-    db      11001111b
-    db      0x00
-
-    ; entries 4: User data segment descriptor
-    dw      0xFFFF
-    dw      0x0000
-    db      0x00
-    db      11110010b
-    db      11001111b
-    db      0x00
+    ; (32 bits) base, (20 bits) limit, (bytes) access bytes, (4 bits) others flags
+    gdt_entries 0, 0, 0, 0                      ; 0x00 - null descriptor
+    gdt_entries 0, 0xFFFFF, 10011010b, 1100b    ; 0x08 - 32 bits Kernel code segment descriptor
+    gdt_entries 0, 0xFFFFF, 10011010b, 0010b    ; 0x10 - 64 bits Kernel code segment descriptor
+    gdt_entries 0, 0xFFFFF, 10010010b, 1100b    ; 0x18 - 32 bits Data segment descriptor
+                                                ; i do not fully understand why, but it we need long mode off.
 gdt_end:
 
 gdt_descriptor:
     ; for lgdt, 6 byte, first 2 must be size and last 4 must be gdt address
     dw      gdt_end - gdt_start - 1         ; gdt size - 1
     dd      gdt_start
-
 
 times 4096-($-$$)   db      0
