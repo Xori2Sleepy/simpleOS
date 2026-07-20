@@ -19,6 +19,7 @@ start:
     mov     si, msg
     call    print_loop
     call    enable_a20
+    call    halt
 
 enable_a20:
     ; for some reason all the website out there make it look like this is some scary as hell process,
@@ -39,7 +40,6 @@ enable_a20:
 
     ; 2: a fallback method incase bios a20 activation fail
     ; utilize i/o ports on CPU and ask keyboard controler to enable A20
-    ; it kinda slow af, also i have never seen in and out instruction before so that cool
     cli
 .wait_keyboard_ctrl_resp:
     in      al, 64h             ; read the regs of keyboard controler, 8 bits,
@@ -81,12 +81,13 @@ enable_a20:
     ; code will fall here naturally if a20 fail
     mov     si, msg_a20_failed
     call    print_loop
-    call    halt
+    call    halt                ; if it truly fail there is not point to let the code run wild,
+                                ; halting is the best and most responsible option
 
 .a20_done:
     mov     si, msg_a20_success
     call    print_loop
-    call    halt                ; here for now
+    ret
     
 
 ; ---------- functions ---------- 
@@ -158,7 +159,6 @@ check_a20:
     clc
     ret
 
-    
 halt:
     ; halt the cpu
     mov     si, msg_cpu_halted
@@ -167,6 +167,7 @@ halt:
     cli
     hlt
     jmp     .halt_loop
+
 ; ---------- functions ----------  
 ; general purpose function | USE ONLY IN REAL MODE!
 ; we dont want dependencies at bare metal level! redundent is the safest!
@@ -182,6 +183,7 @@ print_char:
 
 print_loop:
     ; input regs: need pointer in si
+    ; clobbered regs: NA
     pushf
     push    ax
     cld
@@ -231,11 +233,84 @@ msg_a20_success     db      "A20 successfully initialize! Attempting to build Gl
 msg_a20_failed      db      "CRITICAL: Attempted all reliable method. If you see this message, the only way to continue "
                     db      "is to dig up the bootloader code and manually uncomment other method. Good Luck!", 13, 10, 0
                     db      "CRITICAL: A20 can not be enable; system can not be safely load: Halting CPU!", 13, 10, 0
-msg_cpu_halted      db      "CRITICAL ERROR: CPU halted!", 13, 10, 0
+msg_cpu_halted      db      "CRITICAL: CPU halted! Please reboot the PC", 13, 10, 0
 msg_bios_a20_failed db      "BIOS A20 initialization failed. Error code: ", 13, 10, 0
 msg_bios_a20_cont   db      "Attempt other known method for A20 initiation...", 13, 10, 0
 msg_kb_ctrl_failed  db      "Keyboard controller A20 initiation failed. Attmepting other known method...", 13, 10, 0
 msg_ff_failed       db      "System Control Port A A20 initiation failed!", 13, 10
 
 hex_map             db      "0123456789ABCDEF"
+
+gdt_start:
+    ; lower limit -> 2 byte (16 bits - 0 - 15)
+    ; lower base -> 3 byte (24 bits - 0 - 23)
+
+    ; flags:
+    ; 7 -> present?
+    ; 6-5 -> ring level
+    ; 4 -> code/data segment or speicial system structure
+    ; 3 -> code seg
+    ; 2 -> conforming/direction
+    ; 1 -> rw for code 1 allow reading and for data 1 allow writing
+    ; 0 -> cpu access, set to zero, legacy feature not important if use paging
+    ; bit 3,2,1,0 become type field if it a system structure
+    
+    ; other flags:
+    ; 7 -> granularity = multiply memory by 4 kb and scale 20 bits limit to 32 bits (4gb)
+    ; 6 -> D/B size/bigflags. if code then this control if it uses 32 bit protected or not, if data then stack pointer size
+    ; 5 -> long/64 bits flag. contain native 64 bits or nah?
+    ; AVL -> avaliable flag, not used by CPU, for kernel
+    ; 3-0 -> bit 16-19 of limit (MSB)
+
+    ; base bit -> extra byte for base (24-31) giving total of 34 bits
+
+    dq      0x0     ; null descriptor
+    
+    ; entries 1: 0x08 32 bits Kernel code segment descriptor
+    dw      0xFFFF
+    dw      0x0000
+    db      0x00
+    db      10011010b
+    db      11001111b
+    db      0x00
+
+    ; entries 2: 0x16 64 bits Kernel code segment descriptor
+    dw      0xFFFF
+    dw      0x0000
+    db      0x00
+    db      10011010b
+    db      10101111b
+    db      0x00
+
+    ; entries 3: 32 bits Kernel data segment descriptor
+    dw      0xFFFF
+    dw      0x0000
+    db      0x00
+    db      10010010b
+    db      11001111b
+    db      0x00
+
+    ; entries 3: User code segment descriptor
+    dw      0xFFFF
+    dw      0x0000
+    db      0x00
+    db      11111010b
+    db      11001111b
+    db      0x00
+
+    ; entries 4: User data segment descriptor
+    dw      0xFFFF
+    dw      0x0000
+    db      0x00
+    db      11110010b
+    db      11001111b
+    db      0x00
+gdt_end:
+
+gdt_descriptor:
+    ; for lgdt, 6 byte, first 2 must be size and last 4 must be gdt address
+    dw      gdt_end - gdt_start - 1         ; gdt size - 1
+    dd      gdt_start
+
+
 times 4096-($-$$)   db      0
