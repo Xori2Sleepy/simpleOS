@@ -11,7 +11,7 @@
     db      (%1 >> 24) & 0xFF   ; only need the last 8 bits
 %endmacro
 
-start:
+stage2_entry:
     ; environmental setup, already did this in stage 1, but JUST TO MAKE SURE!
     cli
     xor     ax, ax
@@ -99,7 +99,8 @@ enable_a20:
     call    print_loop
     ret
     
-
+check_cpuid:
+    
 ; ---------- functions ---------- 
 ; more specific function that MIGHT be useful in some other place
 
@@ -180,6 +181,7 @@ halt:
 
 ; ---------- functions ----------  
 ; general purpose function | USE ONLY IN REAL MODE!
+; same function as in stage 1 -
 ; we dont want dependencies at bare metal level! redundent is the safest!
 
 print_char:
@@ -288,4 +290,31 @@ gdt_descriptor:
     dw      gdt_end - gdt_start - 1         ; gdt size - 1
     dd      gdt_start
 
+global  null_descriptor
+global  kernelcode_32bits_descriptor
+global  kernelcode_64bits_descriptor
+global  kerneldata_32bits_descriptor
+
+null_descriptor                     dw      0x00
+kernelcode_32bits_descriptor        dw      0x08
+kernelcode_64bits_descriptor        dw      0x10
+kerneldata_32bits_descriptor        dw      0x18
+
+; coming for 32 mode baby. finally, I have escape the shackle of 16 bits programing!
+cli
+in      al, 0x70            ; Read current CMOS state
+or      al, 0x80            ; Set bit 7 to mask NMIs
+out     0x70, al            ; Send to port 0x70 (cmos)
+in      al, 0x71            ; just a dummy read to clear bus, dangling 0x70 port is dangerous
+
+lgdt    [gdt_descriptor]    ; loading gdt to gdtr
+mov     eax, cr0            ; I just discover that I can use 32 bits regs in real mode...
+or      al, 1               ; turn the first bits of cr0 on (Protection Enable, PE bits)
+mov     cr0, eax            ; protected mode officially on
+
+jmp     kernelcode_32bits_descriptor:protected32_entry
+
+%include "protected32.asm"
+
 times 4096-($-$$)   db      0
+
