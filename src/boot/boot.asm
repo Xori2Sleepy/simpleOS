@@ -6,7 +6,6 @@ start:
     cli
     mov     [boot_drive], dl
     xor     ax, ax
-
     ; clear segment data to zero!
     mov     ds, ax
     mov     es, ax
