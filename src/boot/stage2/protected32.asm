@@ -17,3 +17,11 @@ protected32_entry:
     ; dint uses 9fbff because apprently EBDA can grow into those area...
     mov     esp, 0x95000
 
+; ---------- functions ----------  
+; 2000 slot of 80 col and 25 rows, each slot is 2 bytes
+; 0xB8000 + (row * 80 + col) * 2 <= position logic
+VGA_buffer_write:
+    
+    
+
+VGA_buffer_base     dd      0xb8000

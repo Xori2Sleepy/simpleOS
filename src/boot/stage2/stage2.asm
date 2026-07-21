@@ -29,8 +29,25 @@ stage2_entry:
     mov     si, msg
     call    print_loop
     call    enable_a20
-    call    halt
+    call    bios_cursor         ; need before jumping
 
+    ; coming for 32 mode baby. finally, I have escape the shackle of 16 bits programing!
+    cli
+    in      al, 0x70            ; Read current CMOS state
+    or      al, 0x80            ; Set bit 7 to mask NMIs
+    out     0x70, al            ; Send to port 0x70 (cmos)
+    in      al, 0x71            ; just a dummy read to clear bus, dangling 0x70 port is dangerous
+
+    lgdt    [gdt_descriptor]    ; loading gdt to gdtr
+    mov     eax, cr0            ; I just discover that I can use 32 bits regs in real mode...
+    or      al, 1               ; turn the first bits of cr0 on (Protection Enable, PE bits)
+    mov     cr0, eax            ; protected mode officially on
+
+    jmp     kernelcode_32bits_descriptor:protected32_entry
+
+; ------------------------------------------------------------ 
+;                A20 functions start here!
+; ------------------------------------------------------------ 
 enable_a20:
     ; for some reason all the website out there make it look like this is some scary as hell process,
     ; i am kinda scare now ...
@@ -98,12 +115,16 @@ enable_a20:
     mov     si, msg_a20_success
     call    print_loop
     ret
-    
-check_cpuid:
+; ------------------------------------------------------------ 
+;                A20 functions end here!
+; ------------------------------------------------------------ 
     
 ; ---------- functions ---------- 
-; more specific function that MIGHT be useful in some other place
+; helper function ig
 
+; ------------------------------------------------------------ 
+;               Check A20 functions start here
+; ------------------------------------------------------------ 
 check_a20:
     ; input: NA
     ; output: carry flag, set mean a20 is on vise versa
@@ -169,7 +190,11 @@ check_a20:
     popf
     clc
     ret
+; ------------------------------------------------------------ 
+;               Check A20 functions end here
+; ------------------------------------------------------------ 
 
+; --------------- small halt functions ---------------
 halt:
     ; halt the cpu
     mov     si, msg_cpu_halted
@@ -179,7 +204,31 @@ halt:
     hlt
     jmp     .halt_loop
 
-; ---------- functions ----------  
+; ----------------------------------------------------   
+
+; --------------- bios cursor functions --------------
+get_bios_cursor:
+    ; need it because I dont want to clear screen in 32 protected mode
+    ; it save cursors location as flat index
+    mov ah, 0x03        ; BIOS function 0x03: Read Cursor Position
+    mov bh, 0           ; Page number (0 is default)
+    int 0x10            ; Call BIOS video interrupt
+    
+    ; return: 
+    ; DH = Row (0-24)
+    ; DL = Column (0-79)
+
+    ; Convert Row and Column into a single flat index: (Row * 80) + Column
+    movzx eax, dh       ; EAX = Row
+    imul eax, 80        ; EAX = Row * 80
+    movzx ebx, dl       ; EBX = Column
+    add eax, ebx        ; EAX = (Row * 80) + Column
+
+    mov [bios_cursor], eax 
+    ret
+; ----------------------------------------------------
+
+; ---------- functions ----------
 ; general purpose function | USE ONLY IN REAL MODE!
 ; same function as in stage 1 -
 ; we dont want dependencies at bare metal level! redundent is the safest!
@@ -240,8 +289,9 @@ print_error:
     pop     ax
     ret
 
+; -------------------- variable space --------------------
 msg                 db      "Second Stage bootloader succesfully loaded! Attempting to enable A20...", 13, 10, 0
-msg_a20_success     db      "A20 successfully initialize! Attempting to build Global Descriptor Table...", 13, 10, 0
+msg_a20_success     db      "A20 successfully initialize! Building Global Descriptor Table...", 13, 10, 0
 msg_a20_failed      db      "CRITICAL: Attempted all reliable method. If you see this message, the only way to continue "
                     db      "is to dig up the bootloader code and manually uncomment other method. Good Luck!", 13, 10, 0
                     db      "CRITICAL: A20 can not be enable; system can not be safely load: Halting CPU!", 13, 10, 0
@@ -253,7 +303,7 @@ msg_ff_failed       db      "System Control Port A A20 initiation failed!", 13, 
 
 hex_map             db      "0123456789ABCDEF"
 
-
+; -------------------- gdt space ------------------------
 gdt_start:
     ; lower limit -> 2 byte (16 bits - 0 - 15)
     ; lower base -> 3 byte (24 bits - 0 - 23)
@@ -282,7 +332,6 @@ gdt_start:
     gdt_entries 0, 0xFFFFF, 10011010b, 1100b    ; 0x08 - 32 bits Kernel code segment descriptor
     gdt_entries 0, 0xFFFFF, 10011010b, 0010b    ; 0x10 - 64 bits Kernel code segment descriptor
     gdt_entries 0, 0xFFFFF, 10010010b, 1100b    ; 0x18 - 32 bits Data segment descriptor
-                                                ; i do not fully understand why, but it we need long mode off.
 gdt_end:
 
 gdt_descriptor:
@@ -299,20 +348,11 @@ null_descriptor                     dw      0x00
 kernelcode_32bits_descriptor        dw      0x08
 kernelcode_64bits_descriptor        dw      0x10
 kerneldata_32bits_descriptor        dw      0x18
+; --------------------------------------------------------
 
-; coming for 32 mode baby. finally, I have escape the shackle of 16 bits programing!
-cli
-in      al, 0x70            ; Read current CMOS state
-or      al, 0x80            ; Set bit 7 to mask NMIs
-out     0x70, al            ; Send to port 0x70 (cmos)
-in      al, 0x71            ; just a dummy read to clear bus, dangling 0x70 port is dangerous
-
-lgdt    [gdt_descriptor]    ; loading gdt to gdtr
-mov     eax, cr0            ; I just discover that I can use 32 bits regs in real mode...
-or      al, 1               ; turn the first bits of cr0 on (Protection Enable, PE bits)
-mov     cr0, eax            ; protected mode officially on
-
-jmp     kernelcode_32bits_descriptor:protected32_entry
+; ---------- just other stuff ----------
+global  bios_cursor
+bios_cursor     dd      0x0
 
 %include "src/boot/stage2/protected32.asm"
 
