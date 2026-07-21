@@ -314,7 +314,7 @@ mov     cr0, eax            ; protected mode officially on
 
 jmp     kernelcode_32bits_descriptor:protected32_entry
 
-%include "protected32.asm"
+%include "src/boot/stage2/protected32.asm"
 
 times 4096-($-$$)   db      0
 

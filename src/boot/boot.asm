@@ -78,7 +78,7 @@ disk_error:
 halt:
     mov     si, msg_halt
     call    print_loop
-.halt_loop
+.halt_loop:
     cli
     hlt
     jmp     .halt_loop
