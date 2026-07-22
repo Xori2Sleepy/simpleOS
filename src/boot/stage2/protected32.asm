@@ -11,11 +11,11 @@ protected32_entry:
     mov     ax, kerneldata_32bits_descriptor
     mov     ds, ax
     mov     ss, ax
-    mov     es, ax
+    mov     es, ax 
     mov     fs, ax
     mov     gs, ax
 
-    ; dint uses 7c00 cause old 16bits stack live there 
+    ; dint uses 7c00 cause old 16 bits stack live there 
     ; dint uses 9fbff because apprently EBDA can grow into those area...
     mov     esp, 0x95000
     call    deconstruct_bios_cursor
@@ -26,8 +26,10 @@ protected32_entry:
     xor     ah, ah
     call    move_cursor         ; move cursor to 0,0
     xor     esi, esi
-    mov     ax, ((BG_BLUE | FG_BLACK | BG_BLINKING) << 8) | 'A'
+    mov     ax, ((BG_GREEN | FG_RED) << 8) | 'B'
     call    print_char32
+    mov     esi, msg_welcome32
+    call    print_string32
         
     jmp     stop
 
@@ -156,8 +158,8 @@ print_char32:
     je      .relative           ; print relative to cursor position
 
 .absolute:
-    ; natually fall here, print to col/row
-    push    eax
+    ; natually fall here, print to col/row 
+    push eax
     mov     ax, dx
     mov     edi, 1              ; this is mode argument for functions!
     call    position_translate  ; linear in eax
@@ -177,15 +179,36 @@ print_char32:
     mov     word [edi], ax
     ret
     
+print_string32:
+    ; input regs: esi <- pointer, ah <- 0 (deafult) else uses ah as color
+    ; clobbered regs: NA
+    pushf
+    cld
+    test    ax, ax
+    jnz     .loop
+    ; if eax = 0, use default
+    mov     ah, ((BG_BLACK | FG_WHITE)) 
+.loop:
+    lodsb                       ; Load next word from ESI into AL
+    cmp     al, 0
+    je      .done
+    xor     esi, esi
+    call    print_char32        ; writing relative
+    jmp     .loop
+.done: 
+    popf
+    ret
+
 stop:
     ; function for debugging 
     .loop:
     jmp     .loop
 
+msg_welcome32       db      "Successfully enter 32bits protected mode.", 13, 10, 0
+
 VGA_buffer_base     equ     0xb8000
 current_row         db      0x00000
 current_col         db      0x00000
-
 
 ; Foreground Colors
 FG_BLACK            equ 0x00

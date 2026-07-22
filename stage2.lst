@@ -462,208 +462,236 @@
     11 0000040F 66B81800            <1>     mov     ax, kerneldata_32bits_descriptor
     12 00000413 8ED8                <1>     mov     ds, ax
     13 00000415 8ED0                <1>     mov     ss, ax
-    14 00000417 8EC0                <1>     mov     es, ax
+    14 00000417 8EC0                <1>     mov     es, ax 
     15 00000419 8EE0                <1>     mov     fs, ax
     16 0000041B 8EE8                <1>     mov     gs, ax
     17                              <1> 
-    18                              <1>     ; dint uses 7c00 cause old 16bits stack live there 
+    18                              <1>     ; dint uses 7c00 cause old 16 bits stack live there 
     19                              <1>     ; dint uses 9fbff because apprently EBDA can grow into those area...
     20 0000041D BC00500900          <1>     mov     esp, 0x95000
-    21 00000422 E823000000          <1>     call    deconstruct_bios_cursor
-    22 00000427 E8A7000000          <1>     call    disable_cursor
-    23 0000042C E8B1000000          <1>     call    enable_cursor
+    21 00000422 E82D000000          <1>     call    deconstruct_bios_cursor
+    22 00000427 E8B1000000          <1>     call    disable_cursor
+    23 0000042C E8BB000000          <1>     call    enable_cursor
     24                              <1>     
     25 00000431 30C0                <1>     xor     al, al
     26 00000433 30E4                <1>     xor     ah, ah
-    27 00000435 E861000000          <1>     call    move_cursor         ; move cursor to 0,0
+    27 00000435 E86B000000          <1>     call    move_cursor         ; move cursor to 0,0
     28 0000043A 31F6                <1>     xor     esi, esi
-    29 0000043C 66B84190            <1>     mov     ax, ((BG_BLUE | FG_BLACK | BG_BLINKING) << 8) | 'A'
-    30 00000440 E8AC000000          <1>     call    print_char32
-    31                              <1>         
-    32 00000445 E9E5000000          <1>     jmp     stop
-    33                              <1> 
-    34                              <1> 
-    35                              <1> ; ---------- VGA functions ----------  
-    36                              <1> ; 2000 slot of 80 col and 25 rows, each slot is 2 bytes
-    37                              <1> ; 0xB8000 + (row * 80 + col) * 2 <= position logic
-    38                              <1> 
-    39                              <1> deconstruct_bios_cursor:
-    40                              <1>     ; purpose: it get row and col information from when we are still in 16 bits real mode
-    41                              <1>     ; input: NA
-    42                              <1>     ; out: [current_row], [current_col]
-    43                              <1>     ; clobbered: eax, edx, ecx, flags
-    44                              <1>     ; note: we doesnt care what it clobbered, it call at the start anyway
-    45 0000044A 31FF                <1>     xor     edi, edi
-    46 0000044C A1[E4030000]        <1>     mov     eax, [bios_cursor]
-    47 00000451 E82B000000          <1>     call    position_translate  ; return row and col in al ah respectively
-    48 00000456 A2[31050000]        <1>     mov     [current_row], al
-    49 0000045B 8825[32050000]      <1>     mov     [current_col], ah
-    50 00000461 C3                  <1>     ret
-    51                              <1> 
-    52                              <1> clear_screen:
-    53                              <1>     ; purpose: clear the screen
-    54                              <1>     ; input: ah <- color
-    55 00000462 BF00800B00          <1>     mov     edi, VGA_buffer_base
-    56 00000467 B020                <1>     mov     al, 0x20            ; white space
-    57 00000469 B9D0070000          <1>     mov     ecx, 2000           ; 2k cells
-    58 0000046E FC                  <1>     cld
-    59 0000046F 66F3AB              <1>     rep     stosw
-    60 00000472 C605[31050000]00    <1>     mov     [current_row], 0
-    61 00000479 C605[32050000]00    <1>     mov     [current_col], 0
-    62 00000480 C3                  <1>     ret                         ; es:edi
-    63                              <1> 
-    64                              <1> position_translate:
-    65                              <1>     ; purpose: translate between linear and col/row address
-    66                              <1>     ;        : max input for linear is 2000! and col/row is 25*80!
-    67                              <1>     ; input: linear input -> edi = 0, eax = linear (strictly EAX!)
-    68                              <1>     ;      : col/row input -> edi != 0, al = row, ah = col
-    69                              <1>     ; output: linear input -> al =  row, ah = col
-    70                              <1>     ;       : col/row input -> eax = linear address
-    71 00000481 51                  <1>     push    ecx                 ; no point in saving eax and edi
-    72 00000482 85FF                <1>     test    edi, edi
-    73 00000484 740D                <1>     je      .linear_input
-    74                              <1> 
-    75                              <1> .col_row_input:
-    76                              <1>     ; fall here
-    77 00000486 0FB6CC              <1>     movzx   ecx, ah
-    78 00000489 0FB6C0              <1>     movzx   eax, al
-    79 0000048C 6BC050              <1>     imul    eax, 80
-    80 0000048F 01C8                <1>     add     eax, ecx            ; (al[row] * 80) + ah[col] in eax
-    81 00000491 59                  <1>     pop     ecx
-    82 00000492 C3                  <1>     ret
-    83                              <1>     
-    84                              <1> .linear_input:
-    85                              <1>     ; div cl will divide al (16 bits)
-    86 00000493 66B95000            <1>     mov     cx, 80
-    87 00000497 F6F1                <1>     div     cl                  ; div 8 bits is actually perfect for this job :D
-    88                              <1>                                 ; al is row and ah is col now
-    89 00000499 59                  <1>     pop     ecx
-    90 0000049A C3                  <1>     ret
-    91                              <1> 
-    92                              <1> move_cursor:
-    93                              <1>     ; purpose: well, its move cursor, what more there is to say...
-    94                              <1>     ; input: al = row, ah = col
-    95                              <1>     ; output: NA
-    96                              <1>     ; clobbered: flags
-    97 0000049B 57                  <1>     push    edi
-    98 0000049C 51                  <1>     push    ecx
-    99                              <1> 
-   100 0000049D A2[31050000]        <1>     mov     [current_row], al
-   101 000004A2 8825[32050000]      <1>     mov     [current_col], ah
-   102                              <1> 
-   103 000004A8 BF01000000          <1>     mov     edi, 1
-   104 000004AD E8CFFFFFFF          <1>     call    position_translate  ; eax contain linear address
-   105 000004B2 89C1                <1>     mov     ecx, eax
-   106                              <1> 
-   107                              <1>     ; work in 16 bits, VGA card cant understand 32 bits, alledgedly...
-   108 000004B4 66BAD403            <1>     mov     dx, 0x3D4           ; VGA port
-   109 000004B8 B00E                <1>     mov     al, 0x0E            ; register 14 select (high)
-   110 000004BA EE                  <1>     out     dx, al
-   111                              <1> 
-   112 000004BB 66BAD503            <1>     mov     dx, 0x3D5           ; writing data to VGA
-   113 000004BF 88E8                <1>     mov     al, ch              ; write high byte first
-   114 000004C1 EE                  <1>     out     dx, al
-   115                              <1> 
-   116 000004C2 66BAD403            <1>     mov     dx, 0x3D4
-   117 000004C6 B00F                <1>     mov     al, 0x0F            ; register 15 is low byte
-   118 000004C8 EE                  <1>     out     dx, al
-   119                              <1> 
-   120 000004C9 66BAD503            <1>     mov     dx, 0x3D5
-   121 000004CD 88C8                <1>     mov     al, cl
-   122 000004CF EE                  <1>     out     dx, al
-   123                              <1> 
-   124 000004D0 59                  <1>     pop     ecx
-   125 000004D1 5F                  <1>     pop     edi
-   126 000004D2 C3                  <1>     ret
-   127                              <1>     
-   128                              <1> disable_cursor:
-   129 000004D3 66BAD403            <1>     mov     dx, 0x3D4           ; write to port 0x3D4
-   130 000004D7 B00A                <1>     mov     al, 0x0A            ; write to 0A regs (cursor start)
-   131 000004D9 EE                  <1>     out     dx, al
-   132                              <1> 
-   133 000004DA 66BAD503            <1>     mov     dx, 0x3D5           ; port 0x3D5, data send here
-   134 000004DE B020                <1>     mov     al, 00100000b       ; bit 5 = 1, VGA stop render cursor
-   135 000004E0 EE                  <1>     out     dx, al
-   136 000004E1 C3                  <1>     ret
-   137                              <1> enable_cursor:
-   138 000004E2 66BAD403            <1>     mov     dx, 0x3D4
-   139 000004E6 B00A                <1>     mov     al, 0x0A
-   140 000004E8 EE                  <1>     out     dx, al
-   141                              <1> 
-   142 000004E9 66BAD503            <1>     mov     dx, 0x3D5
-   143 000004ED B000                <1>     mov     al, 0x00            ; reset bit 5 to 0
-   144 000004EF EE                  <1>     out     dx, al
-   145 000004F0 C3                  <1>     ret
-   146                              <1>         
-   147                              <1> ; ---------- Print functions ----------  
-   148                              <1> print_char32:
-   149                              <1>     ; purpose: print a single character, in absolute mode a row/col is needed 
-   150                              <1>     ;          but relative will print to cursor
-   151                              <1>     ; input: esi <- mode, ax <- char, if (abs mode) dl = row, dh = col,
-   152                              <1>     ; output: NA
-   153                              <1>     ; clobbered: NA
-   154                              <1>     ; note: ((BG | FG ) << 8 ) | char   should be your format for ax
-   155 000004F1 85F6                <1>     test    esi, esi
-   156 000004F3 7419                <1>     je      .relative           ; print relative to cursor position
-   157                              <1> 
-   158                              <1> .absolute:
-   159                              <1>     ; natually fall here, print to col/row
-   160 000004F5 50                  <1>     push    eax
-   161 000004F6 6689D0              <1>     mov     ax, dx
-   162 000004F9 BF01000000          <1>     mov     edi, 1              ; this is mode argument for functions!
-   163 000004FE E87EFFFFFF          <1>     call    position_translate  ; linear in eax
-   164 00000503 8DB800800B00        <1>     lea     edi, [eax + VGA_buffer_base]
-   165 00000509 58                  <1>     pop     eax
-   166 0000050A 668907              <1>     mov     word [edi], ax
-   167 0000050D C3                  <1>     ret
-   168                              <1> 
-   169                              <1> .relative:
-   170 0000050E 50                  <1>     push    eax
-   171 0000050F A0[31050000]        <1>     mov     al, [current_row]
-   172 00000514 8A25[32050000]      <1>     mov     ah, [current_col]
-   173 0000051A BF01000000          <1>     mov     edi, 1
-   174 0000051F E85DFFFFFF          <1>     call    position_translate  ; linear in eax
-   175 00000524 8DB800800B00        <1>     lea     edi, [eax + VGA_buffer_base]    ; VGA_buffer_base is a constant so it treated as a imm!
-   176 0000052A 58                  <1>     pop     eax
-   177 0000052B 668907              <1>     mov     word [edi], ax
-   178 0000052E C3                  <1>     ret
-   179                              <1>     
-   180                              <1> stop:
-   181                              <1>     ; function for debugging 
-   182                              <1>     .loop:
-   183 0000052F EBFE                <1>     jmp     .loop
-   184                              <1> 
-   185                              <1> VGA_buffer_base     equ     0xb8000
-   186 00000531 00                  <1> current_row         db      0x00000
-   187 00000532 00                  <1> current_col         db      0x00000
-   188                              <1> 
-   189                              <1> 
-   190                              <1> ; Foreground Colors
-   191                              <1> FG_BLACK            equ 0x00
-   192                              <1> FG_BLUE             equ 0x01
-   193                              <1> FG_GREEN            equ 0x02
-   194                              <1> FG_CYAN             equ 0x03
-   195                              <1> FG_RED              equ 0x04
-   196                              <1> FG_MAGENTA          equ 0x05
-   197                              <1> FG_BROWN            equ 0x06
-   198                              <1> FG_LIGHT_GRAY       equ 0x07
-   199                              <1> FG_DARK_GRAY        equ 0x08
-   200                              <1> FG_LIGHT_BLUE       equ 0x09
-   201                              <1> FG_LIGHT_GREEN      equ 0x0A
-   202                              <1> FG_LIGHT_CYAN       equ 0x0B
-   203                              <1> FG_LIGHT_RED        equ 0x0C
-   204                              <1> FG_LIGHT_MAGENTA    equ 0x0D
-   205                              <1> FG_YELLOW           equ 0x0E
-   206                              <1> FG_WHITE            equ 0x0F
-   207                              <1> 
-   208                              <1> ; Background Colors
-   209                              <1> BG_BLACK            equ 0x00
-   210                              <1> BG_BLUE             equ 0x10
-   211                              <1> BG_GREEN            equ 0x20
-   212                              <1> BG_CYAN             equ 0x30
-   213                              <1> BG_RED              equ 0x40
-   214                              <1> BG_MAGENTA          equ 0x50
-   215                              <1> BG_BROWN            equ 0x60
-   216                              <1> BG_LIGHT_GRAY       equ 0x70
-   217                              <1> BG_BLINKING         equ 0x80 ; this add blinking, need to do a ADD
-   358 00000533 00<rep ACDh>            times 4096-($-$$)   db      0
+    29 0000043C 66B84224            <1>     mov     ax, ((BG_GREEN | FG_RED) << 8) | 'B'
+    30 00000440 E8B6000000          <1>     call    print_char32
+    31 00000445 BE[54050000]        <1>     mov     esi, msg_welcome32
+    32 0000044A E8EA000000          <1>     call    print_string32
+    33                              <1>         
+    34 0000044F E9FE000000          <1>     jmp     stop
+    35                              <1> 
+    36                              <1> 
+    37                              <1> ; ---------- VGA functions ----------  
+    38                              <1> ; 2000 slot of 80 col and 25 rows, each slot is 2 bytes
+    39                              <1> ; 0xB8000 + (row * 80 + col) * 2 <= position logic
+    40                              <1> 
+    41                              <1> deconstruct_bios_cursor:
+    42                              <1>     ; purpose: it get row and col information from when we are still in 16 bits real mode
+    43                              <1>     ; input: NA
+    44                              <1>     ; out: [current_row], [current_col]
+    45                              <1>     ; clobbered: eax, edx, ecx, flags
+    46                              <1>     ; note: we doesnt care what it clobbered, it call at the start anyway
+    47 00000454 31FF                <1>     xor     edi, edi
+    48 00000456 A1[E4030000]        <1>     mov     eax, [bios_cursor]
+    49 0000045B E82B000000          <1>     call    position_translate  ; return row and col in al ah respectively
+    50 00000460 A2[80050000]        <1>     mov     [current_row], al
+    51 00000465 8825[81050000]      <1>     mov     [current_col], ah
+    52 0000046B C3                  <1>     ret
+    53                              <1> 
+    54                              <1> clear_screen:
+    55                              <1>     ; purpose: clear the screen
+    56                              <1>     ; input: ah <- color
+    57 0000046C BF00800B00          <1>     mov     edi, VGA_buffer_base
+    58 00000471 B020                <1>     mov     al, 0x20            ; white space
+    59 00000473 B9D0070000          <1>     mov     ecx, 2000           ; 2k cells
+    60 00000478 FC                  <1>     cld
+    61 00000479 66F3AB              <1>     rep     stosw
+    62 0000047C C605[80050000]00    <1>     mov     [current_row], 0
+    63 00000483 C605[81050000]00    <1>     mov     [current_col], 0
+    64 0000048A C3                  <1>     ret                         ; es:edi
+    65                              <1> 
+    66                              <1> position_translate:
+    67                              <1>     ; purpose: translate between linear and col/row address
+    68                              <1>     ;        : max input for linear is 2000! and col/row is 25*80!
+    69                              <1>     ; input: linear input -> edi = 0, eax = linear (strictly EAX!)
+    70                              <1>     ;      : col/row input -> edi != 0, al = row, ah = col
+    71                              <1>     ; output: linear input -> al =  row, ah = col
+    72                              <1>     ;       : col/row input -> eax = linear address
+    73 0000048B 51                  <1>     push    ecx                 ; no point in saving eax and edi
+    74 0000048C 85FF                <1>     test    edi, edi
+    75 0000048E 740D                <1>     je      .linear_input
+    76                              <1> 
+    77                              <1> .col_row_input:
+    78                              <1>     ; fall here
+    79 00000490 0FB6CC              <1>     movzx   ecx, ah
+    80 00000493 0FB6C0              <1>     movzx   eax, al
+    81 00000496 6BC050              <1>     imul    eax, 80
+    82 00000499 01C8                <1>     add     eax, ecx            ; (al[row] * 80) + ah[col] in eax
+    83 0000049B 59                  <1>     pop     ecx
+    84 0000049C C3                  <1>     ret
+    85                              <1>     
+    86                              <1> .linear_input:
+    87                              <1>     ; div cl will divide al (16 bits)
+    88 0000049D 66B95000            <1>     mov     cx, 80
+    89 000004A1 F6F1                <1>     div     cl                  ; div 8 bits is actually perfect for this job :D
+    90                              <1>                                 ; al is row and ah is col now
+    91 000004A3 59                  <1>     pop     ecx
+    92 000004A4 C3                  <1>     ret
+    93                              <1> 
+    94                              <1> move_cursor:
+    95                              <1>     ; purpose: well, its move cursor, what more there is to say...
+    96                              <1>     ; input: al = row, ah = col
+    97                              <1>     ; output: NA
+    98                              <1>     ; clobbered: flags
+    99 000004A5 57                  <1>     push    edi
+   100 000004A6 51                  <1>     push    ecx
+   101                              <1> 
+   102 000004A7 A2[80050000]        <1>     mov     [current_row], al
+   103 000004AC 8825[81050000]      <1>     mov     [current_col], ah
+   104                              <1> 
+   105 000004B2 BF01000000          <1>     mov     edi, 1
+   106 000004B7 E8CFFFFFFF          <1>     call    position_translate  ; eax contain linear address
+   107 000004BC 89C1                <1>     mov     ecx, eax
+   108                              <1> 
+   109                              <1>     ; work in 16 bits, VGA card cant understand 32 bits, alledgedly...
+   110 000004BE 66BAD403            <1>     mov     dx, 0x3D4           ; VGA port
+   111 000004C2 B00E                <1>     mov     al, 0x0E            ; register 14 select (high)
+   112 000004C4 EE                  <1>     out     dx, al
+   113                              <1> 
+   114 000004C5 66BAD503            <1>     mov     dx, 0x3D5           ; writing data to VGA
+   115 000004C9 88E8                <1>     mov     al, ch              ; write high byte first
+   116 000004CB EE                  <1>     out     dx, al
+   117                              <1> 
+   118 000004CC 66BAD403            <1>     mov     dx, 0x3D4
+   119 000004D0 B00F                <1>     mov     al, 0x0F            ; register 15 is low byte
+   120 000004D2 EE                  <1>     out     dx, al
+   121                              <1> 
+   122 000004D3 66BAD503            <1>     mov     dx, 0x3D5
+   123 000004D7 88C8                <1>     mov     al, cl
+   124 000004D9 EE                  <1>     out     dx, al
+   125                              <1> 
+   126 000004DA 59                  <1>     pop     ecx
+   127 000004DB 5F                  <1>     pop     edi
+   128 000004DC C3                  <1>     ret
+   129                              <1>     
+   130                              <1> disable_cursor:
+   131 000004DD 66BAD403            <1>     mov     dx, 0x3D4           ; write to port 0x3D4
+   132 000004E1 B00A                <1>     mov     al, 0x0A            ; write to 0A regs (cursor start)
+   133 000004E3 EE                  <1>     out     dx, al
+   134                              <1> 
+   135 000004E4 66BAD503            <1>     mov     dx, 0x3D5           ; port 0x3D5, data send here
+   136 000004E8 B020                <1>     mov     al, 00100000b       ; bit 5 = 1, VGA stop render cursor
+   137 000004EA EE                  <1>     out     dx, al
+   138 000004EB C3                  <1>     ret
+   139                              <1> enable_cursor:
+   140 000004EC 66BAD403            <1>     mov     dx, 0x3D4
+   141 000004F0 B00A                <1>     mov     al, 0x0A
+   142 000004F2 EE                  <1>     out     dx, al
+   143                              <1> 
+   144 000004F3 66BAD503            <1>     mov     dx, 0x3D5
+   145 000004F7 B000                <1>     mov     al, 0x00            ; reset bit 5 to 0
+   146 000004F9 EE                  <1>     out     dx, al
+   147 000004FA C3                  <1>     ret
+   148                              <1>         
+   149                              <1> ; ---------- Print functions ----------  
+   150                              <1> print_char32:
+   151                              <1>     ; purpose: print a single character, in absolute mode a row/col is needed 
+   152                              <1>     ;          but relative will print to cursor
+   153                              <1>     ; input: esi <- mode, ax <- char, if (abs mode) dl = row, dh = col,
+   154                              <1>     ; output: NA
+   155                              <1>     ; clobbered: NA
+   156                              <1>     ; note: ((BG | FG ) << 8 ) | char   should be your format for ax
+   157 000004FB 85F6                <1>     test    esi, esi
+   158 000004FD 7419                <1>     je      .relative           ; print relative to cursor position
+   159                              <1> 
+   160                              <1> .absolute:
+   161                              <1>     ; natually fall here, print to col/row 
+   162 000004FF 50                  <1>     push eax
+   163 00000500 6689D0              <1>     mov     ax, dx
+   164 00000503 BF01000000          <1>     mov     edi, 1              ; this is mode argument for functions!
+   165 00000508 E87EFFFFFF          <1>     call    position_translate  ; linear in eax
+   166 0000050D 8DB800800B00        <1>     lea     edi, [eax + VGA_buffer_base]
+   167 00000513 58                  <1>     pop     eax
+   168 00000514 668907              <1>     mov     word [edi], ax
+   169 00000517 C3                  <1>     ret
+   170                              <1> 
+   171                              <1> .relative:
+   172 00000518 50                  <1>     push    eax
+   173 00000519 A0[80050000]        <1>     mov     al, [current_row]
+   174 0000051E 8A25[81050000]      <1>     mov     ah, [current_col]
+   175 00000524 BF01000000          <1>     mov     edi, 1
+   176 00000529 E85DFFFFFF          <1>     call    position_translate  ; linear in eax
+   177 0000052E 8DB800800B00        <1>     lea     edi, [eax + VGA_buffer_base]    ; VGA_buffer_base is a constant so it treated as a imm!
+   178 00000534 58                  <1>     pop     eax
+   179 00000535 668907              <1>     mov     word [edi], ax
+   180 00000538 C3                  <1>     ret
+   181                              <1>     
+   182                              <1> print_string32:
+   183                              <1>     ; input regs: esi <- pointer, ah <- 0 (deafult) else uses ah as color
+   184                              <1>     ; clobbered regs: NA
+   185 00000539 9C                  <1>     pushf
+   186 0000053A FC                  <1>     cld
+   187 0000053B 6685C0              <1>     test    ax, ax
+   188 0000053E 7502                <1>     jnz     .loop
+   189                              <1>     ; if eax = 0, use default
+   190 00000540 B400                <1>     mov     ah, ((BG_BLACK | FG_WHITE) << 8) 
+   190          ******************  <1>  warning: byte exceeds bounds [-w+number-overflow]
+   191                              <1> .loop:
+   192 00000542 AC                  <1>     lodsb                       ; Load next word from ESI into AL
+   193 00000543 3C00                <1>     cmp     al, 0
+   194 00000545 7409                <1>     je      .done
+   195 00000547 31F6                <1>     xor     esi, esi
+   196 00000549 E8ADFFFFFF          <1>     call    print_char32        ; writing relative
+   197 0000054E EBF2                <1>     jmp     .loop
+   198                              <1> .done: 
+   199 00000550 9D                  <1>     popf
+   200 00000551 C3                  <1>     ret
+   201                              <1> 
+   202                              <1> stop:
+   203                              <1>     ; function for debugging 
+   204                              <1>     .loop:
+   205 00000552 EBFE                <1>     jmp     .loop
+   206                              <1> 
+   207 00000554 537563636573736675- <1> msg_welcome32       db      "Successfully enter 32bits protected mode.", 13, 10, 0
+   207 0000055D 6C6C7920656E746572- <1>
+   207 00000566 203332626974732070- <1>
+   207 0000056F 726F74656374656420- <1>
+   207 00000578 6D6F64652E0D0A00    <1>
+   208                              <1> 
+   209                              <1> VGA_buffer_base     equ     0xb8000
+   210 00000580 00                  <1> current_row         db      0x00000
+   211 00000581 00                  <1> current_col         db      0x00000
+   212                              <1> 
+   213                              <1> ; Foreground Colors
+   214                              <1> FG_BLACK            equ 0x00
+   215                              <1> FG_BLUE             equ 0x01
+   216                              <1> FG_GREEN            equ 0x02
+   217                              <1> FG_CYAN             equ 0x03
+   218                              <1> FG_RED              equ 0x04
+   219                              <1> FG_MAGENTA          equ 0x05
+   220                              <1> FG_BROWN            equ 0x06
+   221                              <1> FG_LIGHT_GRAY       equ 0x07
+   222                              <1> FG_DARK_GRAY        equ 0x08
+   223                              <1> FG_LIGHT_BLUE       equ 0x09
+   224                              <1> FG_LIGHT_GREEN      equ 0x0A
+   225                              <1> FG_LIGHT_CYAN       equ 0x0B
+   226                              <1> FG_LIGHT_RED        equ 0x0C
+   227                              <1> FG_LIGHT_MAGENTA    equ 0x0D
+   228                              <1> FG_YELLOW           equ 0x0E
+   229                              <1> FG_WHITE            equ 0x0F
+   230                              <1> 
+   231                              <1> ; Background Colors
+   232                              <1> BG_BLACK            equ 0x00
+   233                              <1> BG_BLUE             equ 0x10
+   234                              <1> BG_GREEN            equ 0x20
+   235                              <1> BG_CYAN             equ 0x30
+   236                              <1> BG_RED              equ 0x40
+   237                              <1> BG_MAGENTA          equ 0x50
+   238                              <1> BG_BROWN            equ 0x60
+   239                              <1> BG_LIGHT_GRAY       equ 0x70
+   240                              <1> BG_BLINKING         equ 0x80 ; this add blinking, need to do a ADD
+   358 00000582 00<rep A7Eh>            times 4096-($-$$)   db      0
