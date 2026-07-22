@@ -2,7 +2,7 @@ all: build run
 
 build:
 	nasm -f bin src/boot/boot.asm -o target/stage1.bin
-	nasm -f bin src/boot/stage2/stage2.asm -o target/stage2.bin
+	nasm -f bin src/boot/stage2/stage2.asm -o target/stage2.bin -l stage2.lst
 	cat target/stage1.bin target/stage2.bin > target/boot.bin
 
 run:

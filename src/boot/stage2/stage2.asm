@@ -7,10 +7,11 @@
     dw      %1 & 0xFFFF         ; base is 32 bits but we only need first 16 here
     db      (%1 >> 16) & 0xFF   ; we only need 16-23 bits
     db      %3                  ; acess bytes
-    db      ((%4 & 0xF0) | ((%2 >> 16) & 0x0F)) ; first 4 bits is the 'other' flags, rest is limit
+    db      ((%4 << 4) | ((%2 >> 16) & 0x0F)) ; first 4 bits is the 'other' flags, rest is limit
     db      (%1 >> 24) & 0xFF   ; only need the last 8 bits
 %endmacro
 
+; --------------- MAIN FUCNTION (basically) --------------- 
 stage2_entry:
     ; environmental setup, already did this in stage 1, but JUST TO MAKE SURE!
     cli
@@ -25,22 +26,22 @@ stage2_entry:
     call    print_char          ; function doesnt clobbered anything, al resuable!
     mov     al, 10
     call    print_char
-
-    mov     si, msg
+mov     si, msg
     call    print_loop
     call    enable_a20
-    call    bios_cursor         ; need before jumping
+    call    get_bios_cursor      ; need before jumping, make sure no write to buffer after this!
 
-    ; coming for 32 mode baby. finally, I have escape the shackle of 16 bits programing!
+
+    ; coming for 32 mode. finally, I have escape the shackle of 16 bits programing!
     cli
     in      al, 0x70            ; Read current CMOS state
     or      al, 0x80            ; Set bit 7 to mask NMIs
     out     0x70, al            ; Send to port 0x70 (cmos)
-    in      al, 0x71            ; just a dummy read to clear bus, dangling 0x70 port is dangerous
+    in      al, 0x71            ; just a dummy read to clear bus, dangling 0x70 port is dangerous, or so I was told
 
     lgdt    [gdt_descriptor]    ; loading gdt to gdtr
     mov     eax, cr0            ; I just discover that I can use 32 bits regs in real mode...
-    or      al, 1               ; turn the first bits of cr0 on (Protection Enable, PE bits)
+    or      eax, 1              ; turn the first bits of cr0 on (Protection Enable, PE bits)
     mov     cr0, eax            ; protected mode officially on
 
     jmp     kernelcode_32bits_descriptor:protected32_entry
@@ -120,8 +121,7 @@ enable_a20:
 ; ------------------------------------------------------------ 
     
 ; ---------- functions ---------- 
-; helper function ig
-
+; ig you can say this is a helper function section
 ; ------------------------------------------------------------ 
 ;               Check A20 functions start here
 ; ------------------------------------------------------------ 
@@ -204,32 +204,32 @@ halt:
     hlt
     jmp     .halt_loop
 
-; ----------------------------------------------------   
-
 ; --------------- bios cursor functions --------------
 get_bios_cursor:
     ; need it because I dont want to clear screen in 32 protected mode
     ; it save cursors location as flat index
-    mov ah, 0x03        ; BIOS function 0x03: Read Cursor Position
-    mov bh, 0           ; Page number (0 is default)
-    int 0x10            ; Call BIOS video interrupt
+    xor     ebx, ebx
+    mov     ah, 0x03        ; BIOS function 0x03: Read Cursor Position
+    mov     bh, 0           ; Page number 0
+    int     0x10            ; Call BIOS video interrupt
     
     ; return: 
     ; DH = Row (0-24)
     ; DL = Column (0-79)
 
     ; Convert Row and Column into a single flat index: (Row * 80) + Column
-    movzx eax, dh       ; EAX = Row
-    imul eax, 80        ; EAX = Row * 80
-    movzx ebx, dl       ; EBX = Column
-    add eax, ebx        ; EAX = (Row * 80) + Column
+    movzx   eax, dh         ; EAX = Row
+    imul    eax, 80         ; EAX = Row * 80
+    movzx   ebx, dl         ; EBX = Column
+    add     eax, ebx        ; EAX = (Row * 80) + Column
 
-    mov [bios_cursor], eax 
+    mov     [bios_cursor], eax 
     ret
 ; ----------------------------------------------------
 
 ; ---------- functions ----------
-; general purpose function | USE ONLY IN REAL MODE!
+; general purpose function | CRITICAL: USE ONLY IN REAL MODE! 
+; IT WILL CRASH IF TRY ON PROTECTED MODE!
 ; same function as in stage 1 -
 ; we dont want dependencies at bare metal level! redundent is the safest!
 
@@ -303,6 +303,9 @@ msg_ff_failed       db      "System Control Port A A20 initiation failed!", 13, 
 
 hex_map             db      "0123456789ABCDEF"
 
+global  bios_cursor
+bios_cursor         dd      0x0
+
 ; -------------------- gdt space ------------------------
 gdt_start:
     ; lower limit -> 2 byte (16 bits - 0 - 15)
@@ -344,17 +347,12 @@ global  kernelcode_32bits_descriptor
 global  kernelcode_64bits_descriptor
 global  kerneldata_32bits_descriptor
 
-null_descriptor                     dw      0x00
-kernelcode_32bits_descriptor        dw      0x08
-kernelcode_64bits_descriptor        dw      0x10
-kerneldata_32bits_descriptor        dw      0x18
+null_descriptor                     equ      0x00
+kernelcode_32bits_descriptor        equ      0x08
+kernelcode_64bits_descriptor        equ      0x10
+kerneldata_32bits_descriptor        equ      0x18
 ; --------------------------------------------------------
 
 ; ---------- just other stuff ----------
-global  bios_cursor
-bios_cursor     dd      0x0
-
-%include "src/boot/stage2/protected32.asm"
-
+%include "src/boot/stage2/protected32.asm"  ; we seperate the 32bit code, look cleaner. It already a mess here.
 times 4096-($-$$)   db      0
-
