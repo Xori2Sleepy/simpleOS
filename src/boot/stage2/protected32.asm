@@ -24,8 +24,10 @@ protected32_entry:
     
     xor     al, al
     xor     ah, ah
-    call    move_cursor
-    mov     ah, 0x20
+    call    move_cursor         ; move cursor to 0,0
+    xor     esi, esi
+    mov     ax, ((BG_BLUE | FG_BLACK | BG_BLINKING) << 8) | 'A'
+    call    print_char32
         
     jmp     stop
 
@@ -50,7 +52,7 @@ deconstruct_bios_cursor:
 clear_screen:
     ; purpose: clear the screen
     ; input: ah <- color
-    mov     edi, [VGA_buffer_base]
+    mov     edi, VGA_buffer_base
     mov     al, 0x20            ; white space
     mov     ecx, 2000           ; 2k cells
     cld
@@ -94,6 +96,9 @@ move_cursor:
     ; clobbered: flags
     push    edi
     push    ecx
+
+    mov     [current_row], al
+    mov     [current_col], ah
 
     mov     edi, 1
     call    position_translate  ; eax contain linear address
@@ -140,12 +145,73 @@ enable_cursor:
     ret
         
 ; ---------- Print functions ----------  
-print_char
+print_char32:
+    ; purpose: print a single character, in absolute mode a row/col is needed 
+    ;          but relative will print to cursor
+    ; input: esi <- mode, ax <- char, if (abs mode) dl = row, dh = col,
+    ; output: NA
+    ; clobbered: NA
+    ; note: ((BG | FG ) << 8 ) | char   should be your format for ax
+    test    esi, esi
+    je      .relative           ; print relative to cursor position
+
+.absolute:
+    ; natually fall here, print to col/row
+    push    eax
+    mov     ax, dx
+    mov     edi, 1              ; this is mode argument for functions!
+    call    position_translate  ; linear in eax
+    lea     edi, [eax + VGA_buffer_base]
+    pop     eax
+    mov     word [edi], ax
+    ret
+
+.relative:
+    push    eax
+    mov     al, [current_row]
+    mov     ah, [current_col]
+    mov     edi, 1
+    call    position_translate  ; linear in eax
+    lea     edi, [eax + VGA_buffer_base]    ; VGA_buffer_base is a constant so it treated as a imm!
+    pop     eax
+    mov     word [edi], ax
+    ret
+    
 stop:
     ; function for debugging 
     .loop:
     jmp     .loop
 
-VGA_buffer_base     dd      0xb8000
-current_row         dd      0x00000
-current_col         dd      0x00000
+VGA_buffer_base     equ     0xb8000
+current_row         db      0x00000
+current_col         db      0x00000
+
+
+; Foreground Colors
+FG_BLACK            equ 0x00
+FG_BLUE             equ 0x01
+FG_GREEN            equ 0x02
+FG_CYAN             equ 0x03
+FG_RED              equ 0x04
+FG_MAGENTA          equ 0x05
+FG_BROWN            equ 0x06
+FG_LIGHT_GRAY       equ 0x07
+FG_DARK_GRAY        equ 0x08
+FG_LIGHT_BLUE       equ 0x09
+FG_LIGHT_GREEN      equ 0x0A
+FG_LIGHT_CYAN       equ 0x0B
+FG_LIGHT_RED        equ 0x0C
+FG_LIGHT_MAGENTA    equ 0x0D
+FG_YELLOW           equ 0x0E
+FG_WHITE            equ 0x0F
+
+; Background Colors
+BG_BLACK            equ 0x00
+BG_BLUE             equ 0x10
+BG_GREEN            equ 0x20
+BG_CYAN             equ 0x30
+BG_RED              equ 0x40
+BG_MAGENTA          equ 0x50
+BG_BROWN            equ 0x60
+BG_LIGHT_GRAY       equ 0x70
+BG_BLINKING         equ 0x80 ; this add blinking, need to do a ADD
