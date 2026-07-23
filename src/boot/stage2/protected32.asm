@@ -22,12 +22,13 @@ protected32_entry:
     call    disable_cursor
     ;call    enable_cursor
     
-    xor     eax, eax
+    xor     eax, eax            ; normal mode
     call    move_cursor         ; move cursor to 0,0
     xor     esi, esi
     mov     ax, ((BG_GREEN | FG_RED) << 8) | 'B'
     call    print_char32
-    jmp     stop
+    
+ ;   jmp    stop
     mov     esi, msg_welcome32
     call    print_string32
         
@@ -111,7 +112,7 @@ move_cursor:
     ; input: al = row, ah = col | upper 16 bit eax = mode
     ; output: NA
     ; clobbered: flagsS
-    ; if upper 16 bits is all 0000, nothing happen
+    ; if upper 16 bits is all 0, it absolute move
     ; if upper 16 bits is not 0, then we do incremental mode by al, ah
     push    edi
     push    ecx
@@ -119,15 +120,14 @@ move_cursor:
 
     mov     edi, eax
 
-
     shr     edi, 16             ; shift logical (zero extend) 16 bits
     test    edi, edi
     jz      .skip
-    add     al, byte [current_row]      ; eh, dumb logic but it work, sorry man ;^;
+    add     al, byte [current_row]      ; eh, dumb logic but it work, sorry man ;-;
     add     ah, byte [current_col]
-    call    grid_normalization
+    call    grid_normalization 
 
-.skip
+.skip:
     mov     byte [current_row], al
     mov     byte [current_col], ah
 
@@ -152,7 +152,7 @@ move_cursor:
     mov     al, cl
     out     dx, al
 
-    pop     ax
+    pop     eax
     pop     ecx
     pop     edi
     ret
@@ -180,18 +180,19 @@ grid_normalization:
     ; purpose: normalized grid input (row and col) to make it actually make sense
     ; input: al = row, ah = col
     ; output: al = row, ah = col ; but normalized! (why am i writing a comment inside a comment???)
-    cmp     ah, 80
+    ; note: DEFINITELY NEED TO IMPROVE THIS, THIS IS SHIT CODE BRO
+    cmp     ah, col_limit
     je      .normalize_col
-    cmp     al, 25
+    cmp     al, row_limit
     je      .normalize_row
     ret
 
-.normalize_col
-    xor     ah, ah
+.normalize_col:
+    sub     ah, col_limit
     add     al, 1
     jmp     grid_normalization
-.normalize_row
-    xor     al, al
+.normalize_row:
+    sub     al, row_limit
     jmp     grid_normalization
 
 ; ---------- Print functions ----------  
@@ -232,7 +233,7 @@ print_char32:
     pop     eax
     jmp     .exit
 
-.exit
+.exit:
     mov     word [edi], ax
     pop     dx
     pop     ax
@@ -254,6 +255,10 @@ print_string32:
     cmp     al, 0
     je      .done
     call    print_char32        ; writing relative
+    mov     eax, 0xFFFFFFFF     ; we can just uses '-1' but this is more intuitive
+    xor     al, al              ; this is preparing confusing argument for move_cursor...
+    mov     al, 1
+    call    move_cursor
     jmp     .loop
 .done: 
     popf
@@ -267,8 +272,8 @@ stop:
 msg_welcome32       db      "Successfully enter 32bits protected mode.", 13, 10, 0
 
 VGA_buffer_base     equ     0xb8000
-row_limit           equ     25
-col_limit           equ     80
+row_limit           equ     24
+col_limit           equ     79
 current_row         db      0x00000
 current_col         db      0x00000
 
