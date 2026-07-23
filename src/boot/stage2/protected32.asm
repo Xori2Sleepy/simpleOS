@@ -107,6 +107,7 @@ position_translate:
 
 move_cursor:
     ; purpose: well, its move cursor, what more there is to say...
+    ;        : edit: it still move cursor, but with more swag :)
     ; input: al = row, ah = col | upper 16 bit eax = mode
     ; output: NA
     ; clobbered: flagsS
@@ -122,8 +123,9 @@ move_cursor:
     shr     edi, 16             ; shift logical (zero extend) 16 bits
     test    edi, edi
     jz      .skip
-    add     byte [current_row], al
-    add     byte [current_col], ah
+    add     al, byte [current_row]      ; eh, dumb logic but it work, sorry man ;^;
+    add     ah, byte [current_col]
+    call    grid_normalization
 
 .skip
     mov     byte [current_row], al
@@ -173,7 +175,25 @@ enable_cursor:
     mov     al, 0x00            ; reset bit 5 to 0
     out     dx, al
     ret
-        
+
+grid_normalization:
+    ; purpose: normalized grid input (row and col) to make it actually make sense
+    ; input: al = row, ah = col
+    ; output: al = row, ah = col ; but normalized! (why am i writing a comment inside a comment???)
+    cmp     ah, 80
+    je      .normalize_col
+    cmp     al, 25
+    je      .normalize_row
+    ret
+
+.normalize_col
+    xor     ah, ah
+    add     al, 1
+    jmp     grid_normalization
+.normalize_row
+    xor     al, al
+    jmp     grid_normalization
+
 ; ---------- Print functions ----------  
 print_char32:
     ; purpose: print a single character, in absolute mode a row/col is needed 
@@ -247,34 +267,36 @@ stop:
 msg_welcome32       db      "Successfully enter 32bits protected mode.", 13, 10, 0
 
 VGA_buffer_base     equ     0xb8000
+row_limit           equ     25
+col_limit           equ     80
 current_row         db      0x00000
 current_col         db      0x00000
 
 ; Foreground Colors
-FG_BLACK            equ 0x00
-FG_BLUE             equ 0x01
-FG_GREEN            equ 0x02
-FG_CYAN             equ 0x03
-FG_RED              equ 0x04
-FG_MAGENTA          equ 0x05
-FG_BROWN            equ 0x06
-FG_LIGHT_GRAY       equ 0x07
-FG_DARK_GRAY        equ 0x08
-FG_LIGHT_BLUE       equ 0x09
-FG_LIGHT_GREEN      equ 0x0A
-FG_LIGHT_CYAN       equ 0x0B
-FG_LIGHT_RED        equ 0x0C
-FG_LIGHT_MAGENTA    equ 0x0D
-FG_YELLOW           equ 0x0E
-FG_WHITE            equ 0x0F
+FG_BLACK            equ     0x00
+FG_BLUE             equ     0x01
+FG_GREEN            equ     0x02
+FG_CYAN             equ     0x03
+FG_RED              equ     0x04
+FG_MAGENTA          equ     0x05
+FG_BROWN            equ     0x06
+FG_LIGHT_GRAY       equ     0x07
+FG_DARK_GRAY        equ     0x08
+FG_LIGHT_BLUE       equ     0x09
+FG_LIGHT_GREEN      equ     0x0A
+FG_LIGHT_CYAN       equ     0x0B
+FG_LIGHT_RED        equ     0x0C
+FG_LIGHT_MAGENTA    equ     0x0D
+FG_YELLOW           equ     0x0E
+FG_WHITE            equ     0x0F
 
 ; Background Colors
-BG_BLACK            equ 0x00
-BG_BLUE             equ 0x10
-BG_GREEN            equ 0x20
-BG_CYAN             equ 0x30
-BG_RED              equ 0x40
-BG_MAGENTA          equ 0x50
-BG_BROWN            equ 0x60
-BG_LIGHT_GRAY       equ 0x70
-BG_BLINKING         equ 0x80 ; this add blinking, need to do a ADD
+BG_BLACK            equ     0x00
+BG_BLUE             equ     0x10
+BG_GREEN            equ     0x20
+BG_CYAN             equ     0x30
+BG_RED              equ     0x40
+BG_MAGENTA          equ     0x50
+BG_BROWN            equ     0x60
+BG_LIGHT_GRAY       equ     0x70
+BG_BLINKING         equ     0x80 ; this add blinking, need to do a ADD
