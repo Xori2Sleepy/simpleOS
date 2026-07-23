@@ -1,4 +1,6 @@
 [bits 32]
+; writing this file make me relize I been taking bios interrupt for granted
+; thought icl it kinda fun writing my own stuff
 
 extern null_descriptor
 extern kernelcode_32bits_descriptor
@@ -20,7 +22,7 @@ protected32_entry:
     mov     esp, 0x95000
     call    deconstruct_bios_cursor
     call    disable_cursor
-    ;call    enable_cursor
+    call    enable_cursor
     
     xor     eax, eax            ; normal mode
     call    move_cursor         ; move cursor to 0,0
@@ -28,7 +30,8 @@ protected32_entry:
     mov     ax, ((BG_GREEN | FG_RED) << 8) | 'B'
     call    print_char32
     
- ;   jmp    stop
+;   jmp    stop
+    xor     ah, ah
     mov     esi, msg_welcome32
     call    print_string32
         
@@ -78,7 +81,7 @@ position_translate:
     ; output: linear input -> al =  row, ah = col
     ;       : col/row input -> eax = linear address
     push    ecx
-    push    edi
+    push    edx
     
     movzx   eax, ax
 
@@ -91,7 +94,7 @@ position_translate:
     movzx   eax, al
     imul    eax, 80
     add     eax, ecx            ; (al[row] * 80) + ah[col] in eax
-    pop     edi
+    pop     edx
     pop     ecx
     ret
     
@@ -102,18 +105,20 @@ position_translate:
     div     cx                  ; div 8 bits is actually perfect for this job :D
                                 ; ax is row and dx is col now   
     mov     ah, dl              ; ax alway lower than 1 byte, so this is possible!
-    pop     edi
+    pop     edx
     pop     ecx
     ret
 
 move_cursor:
     ; purpose: well, its move cursor, what more there is to say...
     ;        : edit: it still move cursor, but with more swag :)
+    ;        : edit: I take it back, it more like 'more nightmare'
     ; input: al = row, ah = col | upper 16 bit eax = mode
     ; output: NA
     ; clobbered: flagsS
     ; if upper 16 bits is all 0, it absolute move
     ; if upper 16 bits is not 0, then we do incremental mode by al, ah
+    push    edx
     push    edi
     push    ecx
     push    eax
@@ -155,6 +160,7 @@ move_cursor:
     pop     eax
     pop     ecx
     pop     edi
+    pop     edx
     ret
     
 disable_cursor:
@@ -181,6 +187,7 @@ grid_normalization:
     ; input: al = row, ah = col
     ; output: al = row, ah = col ; but normalized! (why am i writing a comment inside a comment???)
     ; note: DEFINITELY NEED TO IMPROVE THIS, THIS IS SHIT CODE BRO
+    ;     : add more mode
     cmp     ah, col_limit
     je      .normalize_col
     cmp     al, row_limit
@@ -245,21 +252,52 @@ print_string32:
     ; clobbered regs: NA
     pushf
     cld
-    test    ax, ax
+    mov     dh, ah      ; use provide color, overwrite if needed
+    test    ah, ah
     jnz     .loop
     ; if eax = 0, use default
-    mov     ah, ((BG_BLACK | FG_WHITE)) 
-    xor     esi, esi            ; we can do this cause print_char32 clobbed nothing at all!
+    mov     ah, (BG_BLACK | FG_WHITE) 
+    mov     dh, ah
 .loop:
     lodsb                       ; Load next word from ESI into AL
     cmp     al, 0
     je      .done
-    call    print_char32        ; writing relative
+
+    cmp     al, 10
+    je      .line_feed
+
+    cmp     al, 13
+    je      .carriage_return    ; some type writer bullshit, aint born in this period
+                                ; my mom said she did a typewriter competition before tho
+    
+    mov     ah, dh
+    push    dx                  ; we dont have to do this cause i write my function to be respondsible for perserving
+    push    esi                 ; this mistake cost me 3 hours of my life
+    xor     esi, esi            ; I actually should make a documentation...
+    call    print_char32        ; if even the author is confused by his own function
+    pop     esi                 ; i cant begin to imagine the nightmare other potential contributor will have
+
     mov     eax, 0xFFFFFFFF     ; we can just uses '-1' but this is more intuitive
     xor     al, al              ; this is preparing confusing argument for move_cursor...
+    mov     ah, 1
+    call    move_cursor
+    pop     dx
+    jmp     .loop
+
+.line_feed:
+    mov     eax, -1
     mov     al, 1
+    xor     ah, ah
     call    move_cursor
     jmp     .loop
+    
+.carriage_return:
+    xor     eax, eax            ; absolute mode
+    mov     al, [current_row] 
+    mov     ah, 0
+    call    move_cursor         ; current row, col = 0
+    jmp     .loop
+
 .done: 
     popf
     ret
@@ -269,7 +307,7 @@ stop:
     .loop:
     jmp     .loop
 
-msg_welcome32       db      "Successfully enter 32bits protected mode.", 13, 10, 0
+msg_welcome32       db      "Ruccessfully enter 32bits protected mode.", 13, 10, 0
 
 VGA_buffer_base     equ     0xb8000
 row_limit           equ     24
