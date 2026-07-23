@@ -20,14 +20,14 @@ protected32_entry:
     mov     esp, 0x95000
     call    deconstruct_bios_cursor
     call    disable_cursor
-    call    enable_cursor
+    ;call    enable_cursor
     
-    xor     al, al
-    xor     ah, ah
+    xor     eax, eax
     call    move_cursor         ; move cursor to 0,0
     xor     esi, esi
     mov     ax, ((BG_GREEN | FG_RED) << 8) | 'B'
     call    print_char32
+    jmp     stop
     mov     esi, msg_welcome32
     call    print_string32
         
@@ -54,6 +54,9 @@ deconstruct_bios_cursor:
 clear_screen:
     ; purpose: clear the screen
     ; input: ah <- color
+    push    edi
+    push    ecx
+    push    ax
     mov     edi, VGA_buffer_base
     mov     al, 0x20            ; white space
     mov     ecx, 2000           ; 2k cells
@@ -61,16 +64,23 @@ clear_screen:
     rep     stosw
     mov     [current_row], 0
     mov     [current_col], 0
+    pop     ax
+    pop     ecx
+    pop     edi
     ret                         ; es:edi
 
 position_translate:
     ; purpose: translate between linear and col/row address
     ;        : max input for linear is 2000! and col/row is 25*80!
-    ; input: linear input -> edi = 0, eax = linear (strictly EAX!)
+    ; input: linear input -> edi = 0, eax = linear (or ax is fine)
     ;      : col/row input -> edi != 0, al = row, ah = col
     ; output: linear input -> al =  row, ah = col
     ;       : col/row input -> eax = linear address
-    push    ecx                 ; no point in saving eax and edi
+    push    ecx
+    push    edi
+    
+    movzx   eax, ax
+
     test    edi, edi
     je      .linear_input
 
@@ -80,27 +90,44 @@ position_translate:
     movzx   eax, al
     imul    eax, 80
     add     eax, ecx            ; (al[row] * 80) + ah[col] in eax
+    pop     edi
     pop     ecx
     ret
     
 .linear_input:
-    ; div cl will divide al (16 bits)
+    ; div cx will divide ax (16 bits)
+    xor     edx, edx
     mov     cx, 80
-    div     cl                  ; div 8 bits is actually perfect for this job :D
-                                ; al is row and ah is col now
+    div     cx                  ; div 8 bits is actually perfect for this job :D
+                                ; ax is row and dx is col now   
+    mov     ah, dl              ; ax alway lower than 1 byte, so this is possible!
+    pop     edi
     pop     ecx
     ret
 
 move_cursor:
     ; purpose: well, its move cursor, what more there is to say...
-    ; input: al = row, ah = col
+    ; input: al = row, ah = col | upper 16 bit eax = mode
     ; output: NA
-    ; clobbered: flags
+    ; clobbered: flagsS
+    ; if upper 16 bits is all 0000, nothing happen
+    ; if upper 16 bits is not 0, then we do incremental mode by al, ah
     push    edi
     push    ecx
+    push    eax
 
-    mov     [current_row], al
-    mov     [current_col], ah
+    mov     edi, eax
+
+
+    shr     edi, 16             ; shift logical (zero extend) 16 bits
+    test    edi, edi
+    jz      .skip
+    add     byte [current_row], al
+    add     byte [current_col], ah
+
+.skip
+    mov     byte [current_row], al
+    mov     byte [current_col], ah
 
     mov     edi, 1
     call    position_translate  ; eax contain linear address
@@ -123,6 +150,7 @@ move_cursor:
     mov     al, cl
     out     dx, al
 
+    pop     ax
     pop     ecx
     pop     edi
     ret
@@ -150,33 +178,45 @@ enable_cursor:
 print_char32:
     ; purpose: print a single character, in absolute mode a row/col is needed 
     ;          but relative will print to cursor
-    ; input: esi <- mode, ax <- char, if (abs mode) dl = row, dh = col,
+    ; input: esi <- mode, ax <- char, if (abs mode) dl = row, dh = col, 
     ; output: NA
     ; clobbered: NA
     ; note: ((BG | FG ) << 8 ) | char   should be your format for ax
+    ;     : for simplicity this thing only write! no incrimental features!
+    push    esi
+    push    ax
+    push    dx
     test    esi, esi
     je      .relative           ; print relative to cursor position
 
 .absolute:
     ; natually fall here, print to col/row 
-    push eax
+    push    eax
     mov     ax, dx
     mov     edi, 1              ; this is mode argument for functions!
     call    position_translate  ; linear in eax
+    shl     eax, 1
     lea     edi, [eax + VGA_buffer_base]
     pop     eax
-    mov     word [edi], ax
-    ret
+    jmp     .exit
 
 .relative:
     push    eax
+    xor     eax, eax
     mov     al, [current_row]
     mov     ah, [current_col]
-    mov     edi, 1
+    mov     edi, 1              ; row/col input mode
     call    position_translate  ; linear in eax
+    shl     eax, 1
     lea     edi, [eax + VGA_buffer_base]    ; VGA_buffer_base is a constant so it treated as a imm!
     pop     eax
+    jmp     .exit
+
+.exit
     mov     word [edi], ax
+    pop     dx
+    pop     ax
+    pop     esi
     ret
     
 print_string32:
@@ -188,11 +228,11 @@ print_string32:
     jnz     .loop
     ; if eax = 0, use default
     mov     ah, ((BG_BLACK | FG_WHITE)) 
+    xor     esi, esi            ; we can do this cause print_char32 clobbed nothing at all!
 .loop:
     lodsb                       ; Load next word from ESI into AL
     cmp     al, 0
     je      .done
-    xor     esi, esi
     call    print_char32        ; writing relative
     jmp     .loop
 .done: 
