@@ -40,7 +40,8 @@ sector_load:
 .success:
     mov     si, msg_disk_sc
     call    print_loop
-    jmp     0000:0x7E00              ; jmp to second stage bootloader!
+    mov     dl, [boot_drive]    ; make sure that stage2 got the bootdrive
+    jmp     0000:0x7E00         ; jmp to second stage bootloader!
 
 disk_error:
 
@@ -118,7 +119,7 @@ msg_disk_sc db      "Disk read success! Starting second stage bootloader...", 13
 msg_rs_fail db      "Fatal Error: Disk controller reset fail!", 13, 10, 0
 msg_halt    db      "CPU halting...", 13, 10, 0
 hex_map     db      "0123456789ABCDEF"      ; it used for xlat
-sector2read db      8                       ; a magic number, number of sector to read!
+sector2read db      16                      ; a magic number, number of sector to read!
                                             ; technically this is hardcoded as it depend on the 
                                             ; second stage to fill enoguht space or shit wont load sector properly
                                             ; but i am too lazy to implement some dynamic memory fill or whatever

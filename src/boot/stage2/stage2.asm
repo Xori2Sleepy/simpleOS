@@ -1,6 +1,20 @@
 [bits 16]
 [org 0x7E00]
 
+global  null_descriptor
+global  kernelcode_32bits_descriptor
+global  kernelcode_64bits_descriptor
+global  kerneldata_32bits_descriptor
+
+null_descriptor                     equ      0x00
+kernelcode_32bits_descriptor        equ      0x08
+kernelcode_64bits_descriptor        equ      0x10
+kerneldata_32bits_descriptor        equ      0x18
+
+E820_signature      equ     0x534D4150
+E820_entry_size     equ     24
+
+
 ; input: base, limit, access bytes, flags
 %macro gdt_entries 4
     dw      %2 & 0xFFFF         ; limit is 20 bits we only need first 16 here
@@ -21,16 +35,19 @@ stage2_entry:
     mov     ss, ax
     mov     sp, 0x7c00
     sti
+    
+    mov     [boot_info.boot_drive], dl
 
     mov     al, 13
     call    print_char          ; function doesnt clobbered anything, al resuable!
     mov     al, 10
     call    print_char
-mov     si, msg
+
+    mov     si, msg
     call    print_loop
     call    enable_a20
+    call    detect_memory_e820
     call    get_bios_cursor      ; need before jumping, make sure no write to buffer after this!
-
 
     ; coming for 32 mode. finally, I have escape the shackle of 16 bits programing!
     cli
@@ -194,6 +211,48 @@ check_a20:
 ;               Check A20 functions end here
 ; ------------------------------------------------------------ 
 
+detect_memory_e820:
+    ; i can already tell this is going to be the most confusing function conceptually
+    xor     ebx, ebx            ; token for int, this help bios keep track of bs it spit out
+    mov     dword [boot_info.entry_count], 0
+
+    mov     di, boot_info.memory_map    ; just moving pointer
+
+.next_entry:
+    mov     eax, 0xE820         ; mem map function
+    mov     edx, E820_signature ; it like handshake code? i guess? (SMAP)
+    mov     ecx, E820_entry_size; some legacy stuff doesnt support 24 byte, so this tell that we do want it
+
+    mov     dword [es:di+20], 1 ; needed by some bios? legacy reason
+
+    int     0x15                ; write to our pointer
+    jc      .failed             ; error/no support
+
+    cmp     eax, E820_signature ; see if it give gabbage or nah
+    jne     .failed             ; if sig is bs, it garbage we are done
+
+    mov     eax, [es:di+8]      ; point to length attribute (length is 8 byte)
+    or      eax, [es:di+12]     ; length + 4. 
+    jz      .skip               ; basically cmp rdx, 0 on legnth, but we cant uses rdx so we have these
+
+    inc     dword [boot_info.entry_count]
+    add     di, E820_entry_size ; advanacing pointer if all valid
+
+.skip:
+    test    ebx, ebx            ; if it return 0 by bios it mean no more entry
+    jnz     .next_entry
+
+    cmp     dword [boot_info.entry_count], 0
+    jz      .failed             ; if we got nothing in map it fail
+
+    ret
+
+.failed:
+    mov     si, msg_e820_failed
+    call    print_loop
+    call    halt
+
+
 ; --------------- small halt functions ---------------
 halt:
     ; halt the cpu
@@ -290,11 +349,14 @@ print_error:
     ret
 
 ; -------------------- variable space --------------------
+align 16            ; does it even matter?
 msg                 db      "Second Stage bootloader succesfully loaded! Attempting to enable A20...", 13, 10, 0
-msg_a20_success     db      "A20 successfully initialize! Building Global Descriptor Table...", 13, 10, 0
+msg_e820_success    db      "E820 memory mapping success! Attemp to far jump!", 13, 10, 0
+msg_e820_failed     db      "E820 memory mapping failed; System can not be load safely: Halting CPU..."
+msg_a20_success     db      "A20 successfully initialize! Attempt to build memory map...", 13, 10, 0
 msg_a20_failed      db      "CRITICAL: Attempted all reliable method. If you see this message, the only way to continue "
                     db      "is to dig up the bootloader code and manually uncomment other method. Good Luck!", 13, 10, 0
-                    db      "CRITICAL: A20 can not be enable; system can not be safely load: Halting CPU!", 13, 10, 0
+                    db      "CRITICAL: A20 can not be enable; system can not be safely load: Halting CPU...", 13, 10, 0
 msg_cpu_halted      db      "CRITICAL: CPU halted! Please reboot the PC", 13, 10, 0
 msg_bios_a20_failed db      "BIOS A20 initialization failed. Error code: ", 13, 10, 0
 msg_bios_a20_cont   db      "Attempt other known method for A20 initiation...", 13, 10, 0
@@ -307,6 +369,7 @@ global  bios_cursor
 bios_cursor         dd      0x0
 
 ; -------------------- gdt space ------------------------
+align 8
 gdt_start:
     ; lower limit -> 2 byte (16 bits - 0 - 15)
     ; lower base -> 3 byte (24 bits - 0 - 23)
@@ -341,18 +404,20 @@ gdt_descriptor:
     ; for lgdt, 6 byte, first 2 must be size and last 4 must be gdt address
     dw      gdt_end - gdt_start - 1         ; gdt size - 1
     dd      gdt_start
-
-global  null_descriptor
-global  kernelcode_32bits_descriptor
-global  kernelcode_64bits_descriptor
-global  kerneldata_32bits_descriptor
-
-null_descriptor                     equ      0x00
-kernelcode_32bits_descriptor        equ      0x08
-kernelcode_64bits_descriptor        equ      0x10
-kerneldata_32bits_descriptor        equ      0x18
 ; --------------------------------------------------------
+
+align 8
+boot_info:
+.boot_drive         db      0
+.entry_count        dd      0
+.reserved   times 3 db      0   ; for alignment
+.cpu_ecx            dd      0   ; cpuid stuff
+.cpu_edx            dd      0
+
+align 8
+.memory_map:
+times 64 * 24       db      0
 
 ; ---------- just other stuff ----------
 %include "src/boot/stage2/protected32.asm"  ; we seperate the 32bit code, look cleaner. It already a mess here.
-times 4096-($-$$)   db      0
+times 8192-($-$$)   db      0
