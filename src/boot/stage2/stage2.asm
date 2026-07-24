@@ -63,6 +63,8 @@ stage2_entry:
 
     jmp     kernelcode_32bits_descriptor:protected32_entry
 
+; ---------- functions ---------- 
+; ig you can say this is a function section
 ; ------------------------------------------------------------ 
 ;                A20 functions start here!
 ; ------------------------------------------------------------ 
@@ -137,8 +139,6 @@ enable_a20:
 ;                A20 functions end here!
 ; ------------------------------------------------------------ 
     
-; ---------- functions ---------- 
-; ig you can say this is a helper function section
 ; ------------------------------------------------------------ 
 ;               Check A20 functions start here
 ; ------------------------------------------------------------ 
@@ -211,6 +211,7 @@ check_a20:
 ;               Check A20 functions end here
 ; ------------------------------------------------------------ 
 
+; ------------------ E820 functions ------------------
 detect_memory_e820:
     ; i can already tell this is going to be the most confusing function conceptually
     xor     ebx, ebx            ; token for int, this help bios keep track of bs it spit out
@@ -252,7 +253,6 @@ detect_memory_e820:
     call    print_loop
     call    halt
 
-
 ; --------------- small halt functions ---------------
 halt:
     ; halt the cpu
@@ -284,8 +284,10 @@ get_bios_cursor:
 
     mov     [bios_cursor], eax 
     ret
-; ----------------------------------------------------
 
+; ---------------- CPUID functions -------------------
+get_cpuid:
+    
 ; ---------- functions ----------
 ; general purpose function | CRITICAL: USE ONLY IN REAL MODE! 
 ; IT WILL CRASH IF TRY ON PROTECTED MODE!
