@@ -287,6 +287,25 @@ get_bios_cursor:
 
 ; ---------------- CPUID functions -------------------
 get_cpuid:
+    pushfd
+    pushfd
+    xor     dword [esp], 0x00200000
+    popfd                   ; flags updated
+    pushfd
+    pop     eax             ; save flags in eax
+    xor     eax, [esp]      ; compare it with original flags
+    popfd                   ; restore original flags
+    and     eax, 0x00200000 ; now compare eax with 0x00200000. also we do this to isolate that bit
+                            ; if zero mean our change did not apply
+                            ; so cpuid is not avaliable
+    jz      .unavailable
+
+.available:
+    ; natually fall here
+
+
+
+
     
 ; ---------- functions ----------
 ; general purpose function | CRITICAL: USE ONLY IN REAL MODE! 
