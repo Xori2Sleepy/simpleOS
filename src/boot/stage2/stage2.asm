@@ -1,17 +1,32 @@
 [bits 16]
 [org 0x7E00]
 
+global  null_descriptor
+global  kernelcode_32bits_descriptor
+global  kernelcode_64bits_descriptor
+global  kerneldata_32bits_descriptor
+
+null_descriptor                     equ      0x00
+kernelcode_32bits_descriptor        equ      0x08
+kernelcode_64bits_descriptor        equ      0x10
+kerneldata_32bits_descriptor        equ      0x18
+
+E820_signature      equ     0x534D4150
+E820_entry_size     equ     24
+
+
 ; input: base, limit, access bytes, flags
 %macro gdt_entries 4
     dw      %2 & 0xFFFF         ; limit is 20 bits we only need first 16 here
     dw      %1 & 0xFFFF         ; base is 32 bits but we only need first 16 here
     db      (%1 >> 16) & 0xFF   ; we only need 16-23 bits
     db      %3                  ; acess bytes
-    db      ((%4 & 0xF0) | ((%2 >> 16) & 0x0F)) ; first 4 bits is the 'other' flags, rest is limit
+    db      ((%4 << 4) | ((%2 >> 16) & 0x0F)) ; first 4 bits is the 'other' flags, rest is limit
     db      (%1 >> 24) & 0xFF   ; only need the last 8 bits
 %endmacro
 
-start:
+; --------------- MAIN FUCNTION (basically) --------------- 
+stage2_entry:
     ; environmental setup, already did this in stage 1, but JUST TO MAKE SURE!
     cli
     xor     ax, ax
@@ -20,6 +35,8 @@ start:
     mov     ss, ax
     mov     sp, 0x7c00
     sti
+    
+    mov     [boot_info.boot_drive], dl
 
     mov     al, 13
     call    print_char          ; function doesnt clobbered anything, al resuable!
@@ -29,8 +46,28 @@ start:
     mov     si, msg
     call    print_loop
     call    enable_a20
-    call    halt
+    call    detect_memory_e820
+    call    get_bios_cursor      ; need before jumping, make sure no write to buffer after this!
 
+    ; coming for 32 mode. finally, I have escape the shackle of 16 bits programing!
+    cli
+    in      al, 0x70            ; Read current CMOS state
+    or      al, 0x80            ; Set bit 7 to mask NMIs
+    out     0x70, al            ; Send to port 0x70 (cmos)
+    in      al, 0x71            ; just a dummy read to clear bus, dangling 0x70 port is dangerous, or so I was told
+
+    lgdt    [gdt_descriptor]    ; loading gdt to gdtr
+    mov     eax, cr0            ; I just discover that I can use 32 bits regs in real mode...
+    or      eax, 1              ; turn the first bits of cr0 on (Protection Enable, PE bits)
+    mov     cr0, eax            ; protected mode officially on
+
+    jmp     kernelcode_32bits_descriptor:protected32_entry
+
+; ---------- functions ---------- 
+; ig you can say this is a function section
+; ------------------------------------------------------------ 
+;                A20 functions start here!
+; ------------------------------------------------------------ 
 enable_a20:
     ; for some reason all the website out there make it look like this is some scary as hell process,
     ; i am kinda scare now ...
@@ -98,11 +135,13 @@ enable_a20:
     mov     si, msg_a20_success
     call    print_loop
     ret
+; ------------------------------------------------------------ 
+;                A20 functions end here!
+; ------------------------------------------------------------ 
     
-
-; ---------- functions ---------- 
-; more specific function that MIGHT be useful in some other place
-
+; ------------------------------------------------------------ 
+;               Check A20 functions start here
+; ------------------------------------------------------------ 
 check_a20:
     ; input: NA
     ; output: carry flag, set mean a20 is on vise versa
@@ -168,7 +207,53 @@ check_a20:
     popf
     clc
     ret
+; ------------------------------------------------------------ 
+;               Check A20 functions end here
+; ------------------------------------------------------------ 
 
+; ------------------ E820 functions ------------------
+detect_memory_e820:
+    ; i can already tell this is going to be the most confusing function conceptually
+    xor     ebx, ebx            ; token for int, this help bios keep track of bs it spit out
+    mov     dword [boot_info.entry_count], 0
+
+    mov     di, boot_info.memory_map    ; just moving pointer
+
+.next_entry:
+    mov     eax, 0xE820         ; mem map function
+    mov     edx, E820_signature ; it like handshake code? i guess? (SMAP)
+    mov     ecx, E820_entry_size; some legacy stuff doesnt support 24 byte, so this tell that we do want it
+
+    mov     dword [es:di+20], 1 ; needed by some bios? legacy reason
+
+    int     0x15                ; write to our pointer
+    jc      .failed             ; error/no support
+
+    cmp     eax, E820_signature ; see if it give gabbage or nah
+    jne     .failed             ; if sig is bs, it garbage we are done
+
+    mov     eax, [es:di+8]      ; point to length attribute (length is 8 byte)
+    or      eax, [es:di+12]     ; length + 4. 
+    jz      .skip               ; basically cmp rdx, 0 on legnth, but we cant uses rdx so we have these
+
+    inc     dword [boot_info.entry_count]
+    add     di, E820_entry_size ; advanacing pointer if all valid
+
+.skip:
+    test    ebx, ebx            ; if it return 0 by bios it mean no more entry
+    jnz     .next_entry
+
+    cmp     dword [boot_info.entry_count], 0
+    jz      .failed             ; if we got nothing in map it fail
+
+    ret
+
+.failed:
+    mov     si, msg_e820_failed
+    call    print_loop
+    call    halt
+
+; --------------- small halt functions ---------------
 halt:
     ; halt the cpu
     mov     si, msg_cpu_halted
@@ -178,8 +263,35 @@ halt:
     hlt
     jmp     .halt_loop
 
-; ---------- functions ----------  
-; general purpose function | USE ONLY IN REAL MODE!
+; --------------- bios cursor functions --------------
+get_bios_cursor:
+    ; need it because I dont want to clear screen in 32 protected mode
+    ; it save cursors location as flat index
+    xor     ebx, ebx
+    mov     ah, 0x03        ; BIOS function 0x03: Read Cursor Position
+    mov     bh, 0           ; Page number 0
+    int     0x10            ; Call BIOS video interrupt
+    
+    ; return: 
+    ; DH = Row (0-24)
+    ; DL = Column (0-79)
+
+    ; Convert Row and Column into a single flat index: (Row * 80) + Column
+    movzx   eax, dh         ; EAX = Row
+    imul    eax, 80         ; EAX = Row * 80
+    movzx   ebx, dl         ; EBX = Column
+    add     eax, ebx        ; EAX = (Row * 80) + Column
+
+    mov     [bios_cursor], eax 
+    ret
+
+; ---------------- CPUID functions -------------------
+get_cpuid:
+    
+; ---------- functions ----------
+; general purpose function | CRITICAL: USE ONLY IN REAL MODE! 
+; IT WILL CRASH IF TRY ON PROTECTED MODE!
+; same function as in stage 1 -
 ; we dont want dependencies at bare metal level! redundent is the safest!
 
 print_char:
@@ -238,11 +350,15 @@ print_error:
     pop     ax
     ret
 
+; -------------------- variable space --------------------
+align 16            ; does it even matter?
 msg                 db      "Second Stage bootloader succesfully loaded! Attempting to enable A20...", 13, 10, 0
-msg_a20_success     db      "A20 successfully initialize! Attempting to build Global Descriptor Table...", 13, 10, 0
+msg_e820_success    db      "E820 memory mapping success! Attemp to far jump!", 13, 10, 0
+msg_e820_failed     db      "E820 memory mapping failed; System can not be load safely: Halting CPU..."
+msg_a20_success     db      "A20 successfully initialize! Attempt to build memory map...", 13, 10, 0
 msg_a20_failed      db      "CRITICAL: Attempted all reliable method. If you see this message, the only way to continue "
                     db      "is to dig up the bootloader code and manually uncomment other method. Good Luck!", 13, 10, 0
-                    db      "CRITICAL: A20 can not be enable; system can not be safely load: Halting CPU!", 13, 10, 0
+                    db      "CRITICAL: A20 can not be enable; system can not be safely load: Halting CPU...", 13, 10, 0
 msg_cpu_halted      db      "CRITICAL: CPU halted! Please reboot the PC", 13, 10, 0
 msg_bios_a20_failed db      "BIOS A20 initialization failed. Error code: ", 13, 10, 0
 msg_bios_a20_cont   db      "Attempt other known method for A20 initiation...", 13, 10, 0
@@ -251,7 +367,11 @@ msg_ff_failed       db      "System Control Port A A20 initiation failed!", 13, 
 
 hex_map             db      "0123456789ABCDEF"
 
+global  bios_cursor
+bios_cursor         dd      0x0
 
+; -------------------- gdt space ------------------------
+align 8
 gdt_start:
     ; lower limit -> 2 byte (16 bits - 0 - 15)
     ; lower base -> 3 byte (24 bits - 0 - 23)
@@ -280,12 +400,26 @@ gdt_start:
     gdt_entries 0, 0xFFFFF, 10011010b, 1100b    ; 0x08 - 32 bits Kernel code segment descriptor
     gdt_entries 0, 0xFFFFF, 10011010b, 0010b    ; 0x10 - 64 bits Kernel code segment descriptor
     gdt_entries 0, 0xFFFFF, 10010010b, 1100b    ; 0x18 - 32 bits Data segment descriptor
-                                                ; i do not fully understand why, but it we need long mode off.
 gdt_end:
 
 gdt_descriptor:
     ; for lgdt, 6 byte, first 2 must be size and last 4 must be gdt address
     dw      gdt_end - gdt_start - 1         ; gdt size - 1
     dd      gdt_start
+; --------------------------------------------------------
 
-times 4096-($-$$)   db      0
+align 8
+boot_info:
+.boot_drive         db      0
+.entry_count        dd      0
+.reserved   times 3 db      0   ; for alignment
+.cpu_ecx            dd      0   ; cpuid stuff
+.cpu_edx            dd      0
+
+align 8
+.memory_map:
+times 64 * 24       db      0
+
+; ---------- just other stuff ----------
+%include "src/boot/stage2/protected32.asm"  ; we seperate the 32bit code, look cleaner. It already a mess here.
+times 8192-($-$$)   db      0

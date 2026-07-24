@@ -1,0 +1,697 @@
+     1                                  [bits 16]
+     2                                  [org 0x7E00]
+     3                                  
+     4                                  ; input: base, limit, access bytes, flags
+     5                                  %macro gdt_entries 4
+     6                                      dw      %2 & 0xFFFF         ; limit is 20 bits we only need first 16 here
+     7                                      dw      %1 & 0xFFFF         ; base is 32 bits but we only need first 16 here
+     8                                      db      (%1 >> 16) & 0xFF   ; we only need 16-23 bits
+     9                                      db      %3                  ; acess bytes
+    10                                      db      ((%4 << 4) | ((%2 >> 16) & 0x0F)) ; first 4 bits is the 'other' flags, rest is limit
+    11                                      db      (%1 >> 24) & 0xFF   ; only need the last 8 bits
+    12                                  %endmacro
+    13                                  
+    14                                  ; --------------- MAIN FUCNTION (basically) --------------- 
+    15                                  stage2_entry:
+    16                                      ; environmental setup, already did this in stage 1, but JUST TO MAKE SURE!
+    17 00000000 FA                          cli
+    18 00000001 31C0                        xor     ax, ax
+    19 00000003 8ED8                        mov     ds, ax
+    20 00000005 8EC0                        mov     es, ax
+    21 00000007 8ED0                        mov     ss, ax
+    22 00000009 BC007C                      mov     sp, 0x7c00
+    23 0000000C FB                          sti
+    24                                  
+    25 0000000D B00D                        mov     al, 13
+    26 0000000F E8ED00                      call    print_char          ; function doesnt clobbered anything, al resuable!
+    27 00000012 B00A                        mov     al, 10
+    28 00000014 E8E800                      call    print_char
+    29 00000017 BE[3F01]                mov     si, msg
+    30 0000001A E8E900                      call    print_loop
+    31 0000001D E82000                      call    enable_a20
+    32 00000020 E8BF00                      call    get_bios_cursor      ; need before jumping, make sure no write to buffer after this!
+    33                                  
+    34                                  
+    35                                      ; coming for 32 mode. finally, I have escape the shackle of 16 bits programing!
+    36 00000023 FA                          cli
+    37 00000024 E470                        in      al, 0x70            ; Read current CMOS state
+    38 00000026 0C80                        or      al, 0x80            ; Set bit 7 to mask NMIs
+    39 00000028 E670                        out     0x70, al            ; Send to port 0x70 (cmos)
+    40 0000002A E471                        in      al, 0x71            ; just a dummy read to clear bus, dangling 0x70 port is dangerous, or so I was told
+    41                                  
+    42 0000002C 0F0116[0804]                lgdt    [gdt_descriptor]    ; loading gdt to gdtr
+    43 00000031 0F20C0                      mov     eax, cr0            ; I just discover that I can use 32 bits regs in real mode...
+    44 00000034 6683C801                    or      eax, 1              ; turn the first bits of cr0 on (Protection Enable, PE bits)
+    45 00000038 0F22C0                      mov     cr0, eax            ; protected mode officially on
+    46                                  
+    47 0000003B EA[0E04]0800                jmp     kernelcode_32bits_descriptor:protected32_entry
+    48                                  
+    49                                  ; ------------------------------------------------------------ 
+    50                                  ;                A20 functions start here!
+    51                                  ; ------------------------------------------------------------ 
+    52                                  enable_a20:
+    53                                      ; for some reason all the website out there make it look like this is some scary as hell process,
+    54                                      ; i am kinda scare now ...
+    55                                  
+    56 00000040 E85200                      call    check_a20           ; alway check before anything
+    57 00000043 7249                        jc      .a20_done
+    58                                  
+    59                                      ; 1: try to enable a20 using the bios interrupt method.
+    60 00000045 B80124                      mov     ax, 2401h           ; function 2401h: Enable A20 GATE
+    61 00000048 CD15                        int     15h                 ; call misc system service apparently
+    62 0000004A E84800                      call    check_a20           ; doesnt clobbed ax (error code return from in t 15h)
+    63 0000004D 723F                        jc      .a20_done
+    64 0000004F BE[F602]                    mov     si, msg_bios_a20_failed
+    65 00000052 E8C100                      call    print_error         ; args is error code in ah and string pointer in si
+    66 00000055 BE[2503]                    mov     si, msg_bios_a20_cont
+    67 00000058 E8AB00                      call    print_loop
+    68                                  
+    69                                      ; 2: a fallback method incase bios a20 activation fail
+    70                                      ; utilize i/o ports on CPU and ask keyboard controler to enable A20
+    71 0000005B FA                          cli
+    72                                  .wait_keyboard_ctrl_resp:
+    73 0000005C E464                        in      al, 64h             ; read the regs of keyboard controler, 8 bits,
+    74                                                                  ; store info from ports 64h to al
+    75 0000005E A802                        test    al, 2               ; and 0000 0010 to isolate second bits (bits 1 AKA status bit) for testing status
+    76 00000060 75FA                        jnz     .wait_keyboard_ctrl_resp    ; if we AND and it give zero it meant status bit is off and empty-
+    77                                                                  ; -which mean we can safely use mov to talk to keyboard controler
+    78 00000062 B0DF                        mov     al, 0xDF            ; 0xDF the command for enabling A20, DD is disabling!
+    79 00000064 E664                        out     64h, al             ; send info on al to cpu I/O port 64h 
+    80 00000066 FB                          sti
+    81 00000067 E82B00                      call    check_a20
+    82 0000006A 7222                        jc      .a20_done
+    83 0000006C BE[5803]                    mov     si, msg_kb_ctrl_failed
+    84 0000006F E89400                      call    print_loop
+    85                                  
+    86                                      ; 3: fast port 92h, a modern and fast alternative to port 64h (keyboard controller)
+    87                                      ; we also need to make sure bits 0 is off incase accidental hard reset
+    88 00000072 E492                        in      al, 92h             ; also respond to several other system level switch!
+    89 00000074 0C02                        or      al, 2               ; set bits 1 to 1 (this the A20 bit!)
+    90 00000076 24FE                        and     al, 0xFE            ; set bits 0 to 0 to prevent accidental hard reset
+    91 00000078 E692                        out     92h, al             ; write update to port
+    92 0000007A E81800                      call    check_a20
+    93 0000007D 720F                        jc      .a20_done
+    94 0000007F BE[A603]                    mov     si, msg_ff_failed
+    95 00000082 E88100                      call    print_loop
+    96                                  
+    97                                      ; some other method but too obscue might break thing :( dont want to remove it though so it stay as comment
+    98                                      ; 4: desperate time require desperate measure, fast and dirty 0EEh! (for 386SL / Geode)
+    99                                      ;in      al, 0EEh            ; Some chipsets enable A20 just by reading this port apparently???
+   100                                  
+   101                                      ; 5: search the depth of internet for Phoenix/C&T stuff idk
+   102                                      ;in      al, 61h
+   103                                      ;or      al, 0x80            ; force latch high
+   104                                      ;and     al, 0xFE            ; clear bit 0 so speaker doesnt scream cause this thing also control other stuff
+   105                                      ;out     61h, al
+   106                                      ;call    check_a20
+   107                                  
+   108                                  .a20_failed:
+   109                                      ; code will fall here naturally if a20 fail
+   110 00000085 BE[CC01]                    mov     si, msg_a20_failed
+   111 00000088 E87B00                      call    print_loop
+   112 0000008B E84A00                      call    halt                ; if it truly fail there is not point to let the code run wild,
+   113                                                                  ; halting is the best and most responsible option
+   114                                  
+   115                                  .a20_done:
+   116 0000008E BE[8901]                    mov     si, msg_a20_success
+   117 00000091 E87200                      call    print_loop
+   118 00000094 C3                          ret
+   119                                  ; ------------------------------------------------------------ 
+   120                                  ;                A20 functions end here!
+   121                                  ; ------------------------------------------------------------ 
+   122                                      
+   123                                  ; ---------- functions ---------- 
+   124                                  ; ig you can say this is a helper function section
+   125                                  ; ------------------------------------------------------------ 
+   126                                  ;               Check A20 functions start here
+   127                                  ; ------------------------------------------------------------ 
+   128                                  check_a20:
+   129                                      ; input: NA
+   130                                      ; output: carry flag, set mean a20 is on vise versa
+   131                                      ; clobbled: carry flag (potentially memory corruption but highly unlikely), 
+   132                                  
+   133                                      ; principle is that higest possible address is 0xFFFF:0xFFFF which is 0xFFFF * 16 + 0xFFFF
+   134                                      ; = 0x10FFF0, the cpu cant see that 10 in __FFEF so it it wrap to FFEF. We just have to write to some address
+   135                                      ; (in this case i choose 0x500 cause it stack bottom, unless you got crazy stack aint no data gonna be here -
+   136                                      ; - so it fine even if it corrupt)
+   137                                      ; then we write another stuff to 10500, if it unwrap our value should still be there, if it is wrap it will be overwrite
+   138                                      ; with new value, we just have to compare the 0x500 with our new value, if equal than a20 not on
+   139 00000095 9C                          pushf
+   140 00000096 50                          push    ax
+   141 00000097 56                          push    si
+   142 00000098 57                          push    di
+   143 00000099 1E                          push    ds
+   144 0000009A 06                          push    es
+   145 0000009B FA                          cli
+   146                                  
+   147 0000009C 31C0                        xor     ax, ax
+   148 0000009E 8ED8                        mov     ds, ax              ; data segment = 0x0000
+   149 000000A0 BE0005                      mov     si, 0x500           ; 0x0000:0x0500, we know 0x500 is safe memory zone
+   150                                  
+   151 000000A3 F7D0                        not     ax                  ; 0xFFFF in ax
+   152 000000A5 8EC0                        mov     es, ax              ; extra segment = 0xFFFF
+   153 000000A7 BF1005                      mov     di, 0x0510
+   154                                  
+   155                                      ; we saved stuff, dont want memory corruption after all
+   156 000000AA 3E8A04                      mov     al, [ds:si]         ; this represent the non wrap address
+   157 000000AD 50                          push    ax
+   158 000000AE 268A05                      mov     al, [es:di]         ; this represent the "beyond" address
+   159 000000B1 50                          push    ax
+   160                                  
+   161 000000B2 3EC60467                    mov     byte [ds:si], 0x67  ; random value to non wrap address
+   162 000000B6 26C605FF                    mov     byte [es:di], 0xFF  ; if it wrap this should overwrite 0x67
+   163                                  
+   164 000000BA 3E803CFF                    cmp     byte [ds:si], 0xFF  ; the non wrap address equal the beyond address, it wrap
+   165                                  
+   166 000000BE 58                          pop     ax
+   167 000000BF 268805                      mov     [es:di], al
+   168 000000C2 58                          pop     ax
+   169 000000C3 3E8804                      mov     [ds:si], al
+   170                                  
+   171 000000C6 7408                        je      .a20_disabled
+   172                                  
+   173                                  .a20_enabled:
+   174                                      ; naturally fall here
+   175 000000C8 07                          pop     es
+   176 000000C9 1F                          pop     ds
+   177 000000CA 5F                          pop     di
+   178 000000CB 5E                          pop     si
+   179 000000CC 58                          pop     ax
+   180 000000CD 9D                          popf
+   181 000000CE F9                          stc
+   182 000000CF C3                          ret
+   183                                  
+   184                                  .a20_disabled:
+   185 000000D0 07                          pop     es
+   186 000000D1 1F                          pop     ds
+   187 000000D2 5F                          pop     di
+   188 000000D3 5E                          pop     si 
+   189 000000D4 58                          pop     ax
+   190 000000D5 9D                          popf
+   191 000000D6 F8                          clc
+   192 000000D7 C3                          ret
+   193                                  ; ------------------------------------------------------------ 
+   194                                  ;               Check A20 functions end here
+   195                                  ; ------------------------------------------------------------ 
+   196                                  
+   197                                  ; --------------- small halt functions ---------------
+   198                                  halt:
+   199                                      ; halt the cpu
+   200 000000D8 BE[C902]                    mov     si, msg_cpu_halted
+   201 000000DB E82800                      call    print_loop
+   202                                  .halt_loop:
+   203 000000DE FA                          cli
+   204 000000DF F4                          hlt
+   205 000000E0 EBFC                        jmp     .halt_loop
+   206                                  
+   207                                  ; --------------- bios cursor functions --------------
+   208                                  get_bios_cursor:
+   209                                      ; need it because I dont want to clear screen in 32 protected mode
+   210                                      ; it save cursors location as flat index
+   211 000000E2 6631DB                      xor     ebx, ebx
+   212 000000E5 B403                        mov     ah, 0x03        ; BIOS function 0x03: Read Cursor Position
+   213 000000E7 B700                        mov     bh, 0           ; Page number 0
+   214 000000E9 CD10                        int     0x10            ; Call BIOS video interrupt
+   215                                      
+   216                                      ; return: 
+   217                                      ; DH = Row (0-24)
+   218                                      ; DL = Column (0-79)
+   219                                  
+   220                                      ; Convert Row and Column into a single flat index: (Row * 80) + Column
+   221 000000EB 660FB6C6                    movzx   eax, dh         ; EAX = Row
+   222 000000EF 666BC050                    imul    eax, 80         ; EAX = Row * 80
+   223 000000F3 660FB6DA                    movzx   ebx, dl         ; EBX = Column
+   224 000000F7 6601D8                      add     eax, ebx        ; EAX = (Row * 80) + Column
+   225                                  
+   226 000000FA 66A3[E403]                  mov     [bios_cursor], eax 
+   227 000000FE C3                          ret
+   228                                  ; ----------------------------------------------------
+   229                                  
+   230                                  ; ---------- functions ----------
+   231                                  ; general purpose function | CRITICAL: USE ONLY IN REAL MODE! 
+   232                                  ; IT WILL CRASH IF TRY ON PROTECTED MODE!
+   233                                  ; same function as in stage 1 -
+   234                                  ; we dont want dependencies at bare metal level! redundent is the safest!
+   235                                  
+   236                                  print_char:
+   237                                      ; input regs: need ASCII # in al
+   238                                      ; clobbered regs: NA
+   239 000000FF 50                          push    ax
+   240 00000100 B40E                        mov     ah, 0x0E
+   241 00000102 CD10                        int     0x10
+   242 00000104 58                          pop     ax
+   243 00000105 C3                          ret
+   244                                  
+   245                                  print_loop:
+   246                                      ; input regs: need pointer in si
+   247                                      ; clobbered regs: NA
+   248 00000106 9C                          pushf
+   249 00000107 50                          push    ax
+   250 00000108 FC                          cld
+   251                                  .loop:
+   252 00000109 AC                          lodsb
+   253 0000010A 3C00                        cmp     al, 0
+   254 0000010C 7405                        je      .done
+   255 0000010E E8EEFF                      call    print_char
+   256 00000111 EBF6                        jmp     .loop
+   257                                  .done: 
+   258 00000113 58                          pop     ax
+   259 00000114 9D                          popf
+   260 00000115 C3                          ret
+   261                                  
+   262                                  print_error:
+   263                                      ; input regs: pointer to error string in si
+   264                                      ;           : byte size error (hex) in ah
+   265                                      ; clobbered regs: NA
+   266 00000116 50                          push    ax
+   267 00000117 53                          push    bx
+   268 00000118 E8EBFF                      call    print_loop
+   269                                      
+   270                                      ; print first
+   271 0000011B 88E0                        mov     al, ah
+   272 0000011D C0E804                      shr     al, 4
+   273 00000120 BB[D403]                    mov     bx, hex_map
+   274 00000123 D7                          xlat
+   275 00000124 E8D8FF                      call    print_char
+   276                                      ; print second 
+   277 00000127 88E0                        mov     al, ah
+   278 00000129 240F                        and     al, 0Fh
+   279 0000012B BB[D403]                    mov     bx, hex_map
+   280 0000012E D7                          xlat
+   281 0000012F E8CDFF                      call    print_char
+   282                                      ; print line feed and NL
+   283 00000132 B00D                        mov     al, 13
+   284 00000134 E8C8FF                      call    print_char
+   285 00000137 B00A                        mov     al, 10
+   286 00000139 E8C3FF                      call    print_char
+   287                                      
+   288 0000013C 5B                          pop     bx
+   289 0000013D 58                          pop     ax
+   290 0000013E C3                          ret
+   291                                  
+   292                                  ; -------------------- variable space --------------------
+   293 0000013F 5365636F6E64205374-     msg                 db      "Second Stage bootloader succesfully loaded! Attempting to enable A20...", 13, 10, 0
+   293 00000148 61676520626F6F746C-
+   293 00000151 6F6164657220737563-
+   293 0000015A 63657366756C6C7920-
+   293 00000163 6C6F61646564212041-
+   293 0000016C 7474656D7074696E67-
+   293 00000175 20746F20656E61626C-
+   293 0000017E 65204132302E2E2E0D-
+   293 00000187 0A00               
+   294 00000189 413230207375636365-     msg_a20_success     db      "A20 successfully initialize! Building Global Descriptor Table...", 13, 10, 0
+   294 00000192 737366756C6C792069-
+   294 0000019B 6E697469616C697A65-
+   294 000001A4 21204275696C64696E-
+   294 000001AD 6720476C6F62616C20-
+   294 000001B6 44657363726970746F-
+   294 000001BF 72205461626C652E2E-
+   294 000001C8 2E0D0A00           
+   295 000001CC 435249544943414C3A-     msg_a20_failed      db      "CRITICAL: Attempted all reliable method. If you see this message, the only way to continue "
+   295 000001D5 20417474656D707465-
+   295 000001DE 6420616C6C2072656C-
+   295 000001E7 6961626C65206D6574-
+   295 000001F0 686F642E2049662079-
+   295 000001F9 6F7520736565207468-
+   295 00000202 6973206D6573736167-
+   295 0000020B 652C20746865206F6E-
+   295 00000214 6C792077617920746F-
+   295 0000021D 20636F6E74696E7565-
+   295 00000226 20                 
+   296 00000227 697320746F20646967-                         db      "is to dig up the bootloader code and manually uncomment other method. Good Luck!", 13, 10, 0
+   296 00000230 207570207468652062-
+   296 00000239 6F6F746C6F61646572-
+   296 00000242 20636F646520616E64-
+   296 0000024B 206D616E75616C6C79-
+   296 00000254 20756E636F6D6D656E-
+   296 0000025D 74206F74686572206D-
+   296 00000266 6574686F642E20476F-
+   296 0000026F 6F64204C75636B210D-
+   296 00000278 0A00               
+   297 0000027A 435249544943414C3A-                         db      "CRITICAL: A20 can not be enable; system can not be safely load: Halting CPU!", 13, 10, 0
+   297 00000283 204132302063616E20-
+   297 0000028C 6E6F7420626520656E-
+   297 00000295 61626C653B20737973-
+   297 0000029E 74656D2063616E206E-
+   297 000002A7 6F7420626520736166-
+   297 000002B0 656C79206C6F61643A-
+   297 000002B9 2048616C74696E6720-
+   297 000002C2 435055210D0A00     
+   298 000002C9 435249544943414C3A-     msg_cpu_halted      db      "CRITICAL: CPU halted! Please reboot the PC", 13, 10, 0
+   298 000002D2 204350552068616C74-
+   298 000002DB 65642120506C656173-
+   298 000002E4 65207265626F6F7420-
+   298 000002ED 7468652050430D0A00 
+   299 000002F6 42494F532041323020-     msg_bios_a20_failed db      "BIOS A20 initialization failed. Error code: ", 13, 10, 0
+   299 000002FF 696E697469616C697A-
+   299 00000308 6174696F6E20666169-
+   299 00000311 6C65642E204572726F-
+   299 0000031A 7220636F64653A200D-
+   299 00000323 0A00               
+   300 00000325 417474656D7074206F-     msg_bios_a20_cont   db      "Attempt other known method for A20 initiation...", 13, 10, 0
+   300 0000032E 74686572206B6E6F77-
+   300 00000337 6E206D6574686F6420-
+   300 00000340 666F72204132302069-
+   300 00000349 6E6974696174696F6E-
+   300 00000352 2E2E2E0D0A00       
+   301 00000358 4B6579626F61726420-     msg_kb_ctrl_failed  db      "Keyboard controller A20 initiation failed. Attmepting other known method...", 13, 10, 0
+   301 00000361 636F6E74726F6C6C65-
+   301 0000036A 722041323020696E69-
+   301 00000373 74696174696F6E2066-
+   301 0000037C 61696C65642E204174-
+   301 00000385 746D657074696E6720-
+   301 0000038E 6F74686572206B6E6F-
+   301 00000397 776E206D6574686F64-
+   301 000003A0 2E2E2E0D0A00       
+   302 000003A6 53797374656D20436F-     msg_ff_failed       db      "System Control Port A A20 initiation failed!", 13, 10
+   302 000003AF 6E74726F6C20506F72-
+   302 000003B8 742041204132302069-
+   302 000003C1 6E6974696174696F6E-
+   302 000003CA 206661696C6564210D-
+   302 000003D3 0A                 
+   303                                  
+   304 000003D4 303132333435363738-     hex_map             db      "0123456789ABCDEF"
+   304 000003DD 39414243444546     
+   305                                  
+   306                                  global  bios_cursor
+   307 000003E4 00000000                bios_cursor         dd      0x0
+   308                                  
+   309                                  ; -------------------- gdt space ------------------------
+   310                                  gdt_start:
+   311                                      ; lower limit -> 2 byte (16 bits - 0 - 15)
+   312                                      ; lower base -> 3 byte (24 bits - 0 - 23)
+   313                                  
+   314                                      ; flags:
+   315                                      ; 7 -> present?
+   316                                      ; 6-5 -> ring level
+   317                                      ; 4 -> code/data segment or speicial system structure
+   318                                      ; 3 -> code seg
+   319                                      ; 2 -> conforming/direction
+   320                                      ; 1 -> rw for code 1 allow reading and for data 1 allow writing
+   321                                      ; 0 -> cpu access, set to zero, legacy feature not important if use paging
+   322                                      ; bit 3,2,1,0 become type field if it a system structure
+   323                                      
+   324                                      ; other flags:
+   325                                      ; 7 -> granularity = multiply memory by 4 kb and scale 20 bits limit to 32 bits (4gb)
+   326                                      ; 6 -> D/B size/bigflags. if code then this control if it uses 32 bit protected or not, if data then stack pointer size
+   327                                      ; 5 -> long/64 bits flag. 64 bits code?
+   328                                      ; AVL -> avaliable flag, not used by CPU, for kernel
+   329                                      ; 3-0 -> bit 16-19 of limit (MSB)
+   330                                  
+   331                                      ; base bit -> extra byte for base (24-31) giving total of 32 bits
+   332                                  
+   333                                      ; (32 bits) base, (20 bits) limit, (bytes) access bytes, (4 bits) others flags
+   334                                      gdt_entries 0, 0, 0, 0                      ; 0x00 - null descriptor
+     6 000003E8 0000                <1>  dw %2 & 0xFFFF
+     7 000003EA 0000                <1>  dw %1 & 0xFFFF
+     8 000003EC 00                  <1>  db (%1 >> 16) & 0xFF
+     9 000003ED 00                  <1>  db %3
+    10 000003EE 00                  <1>  db ((%4 << 4) | ((%2 >> 16) & 0x0F))
+    11 000003EF 00                  <1>  db (%1 >> 24) & 0xFF
+   335                                      gdt_entries 0, 0xFFFFF, 10011010b, 1100b    ; 0x08 - 32 bits Kernel code segment descriptor
+     6 000003F0 FFFF                <1>  dw %2 & 0xFFFF
+     7 000003F2 0000                <1>  dw %1 & 0xFFFF
+     8 000003F4 00                  <1>  db (%1 >> 16) & 0xFF
+     9 000003F5 9A                  <1>  db %3
+    10 000003F6 CF                  <1>  db ((%4 << 4) | ((%2 >> 16) & 0x0F))
+    11 000003F7 00                  <1>  db (%1 >> 24) & 0xFF
+   336                                      gdt_entries 0, 0xFFFFF, 10011010b, 0010b    ; 0x10 - 64 bits Kernel code segment descriptor
+     6 000003F8 FFFF                <1>  dw %2 & 0xFFFF
+     7 000003FA 0000                <1>  dw %1 & 0xFFFF
+     8 000003FC 00                  <1>  db (%1 >> 16) & 0xFF
+     9 000003FD 9A                  <1>  db %3
+    10 000003FE 2F                  <1>  db ((%4 << 4) | ((%2 >> 16) & 0x0F))
+    11 000003FF 00                  <1>  db (%1 >> 24) & 0xFF
+   337                                      gdt_entries 0, 0xFFFFF, 10010010b, 1100b    ; 0x18 - 32 bits Data segment descriptor
+     6 00000400 FFFF                <1>  dw %2 & 0xFFFF
+     7 00000402 0000                <1>  dw %1 & 0xFFFF
+     8 00000404 00                  <1>  db (%1 >> 16) & 0xFF
+     9 00000405 92                  <1>  db %3
+    10 00000406 CF                  <1>  db ((%4 << 4) | ((%2 >> 16) & 0x0F))
+    11 00000407 00                  <1>  db (%1 >> 24) & 0xFF
+   338                                  gdt_end:
+   339                                  
+   340                                  gdt_descriptor:
+   341                                      ; for lgdt, 6 byte, first 2 must be size and last 4 must be gdt address
+   342 00000408 1F00                        dw      gdt_end - gdt_start - 1         ; gdt size - 1
+   343 0000040A [E8030000]                  dd      gdt_start
+   344                                  
+   345                                  global  null_descriptor
+   346                                  global  kernelcode_32bits_descriptor
+   347                                  global  kernelcode_64bits_descriptor
+   348                                  global  kerneldata_32bits_descriptor
+   349                                  
+   350                                  null_descriptor                     equ      0x00
+   351                                  kernelcode_32bits_descriptor        equ      0x08
+   352                                  kernelcode_64bits_descriptor        equ      0x10
+   353                                  kerneldata_32bits_descriptor        equ      0x18
+   354                                  ; --------------------------------------------------------
+   355                                  
+   356                                  ; ---------- just other stuff ----------
+   357                                  %include "src/boot/stage2/protected32.asm"  ; we seperate the 32bit code, look cleaner. It already a mess here.
+     1                              <1> [bits 32]
+     2                              <1> 
+     3                              <1> extern null_descriptor
+     4                              <1> extern kernelcode_32bits_descriptor
+     5                              <1> extern kernelcode_64bits_descriptor
+     6                              <1> extern kerneldata_32bits_descriptor
+     7                              <1> extern bios_cursor
+     8                              <1> 
+     9                              <1> protected32_entry:
+    10 0000040E FA                  <1>     cli
+    11 0000040F 66B81800            <1>     mov     ax, kerneldata_32bits_descriptor
+    12 00000413 8ED8                <1>     mov     ds, ax
+    13 00000415 8ED0                <1>     mov     ss, ax
+    14 00000417 8EC0                <1>     mov     es, ax 
+    15 00000419 8EE0                <1>     mov     fs, ax
+    16 0000041B 8EE8                <1>     mov     gs, ax
+    17                              <1> 
+    18                              <1>     ; dint uses 7c00 cause old 16 bits stack live there 
+    19                              <1>     ; dint uses 9fbff because apprently EBDA can grow into those area...
+    20 0000041D BC00500900          <1>     mov     esp, 0x95000
+    21 00000422 E82D000000          <1>     call    deconstruct_bios_cursor
+    22 00000427 E8B1000000          <1>     call    disable_cursor
+    23 0000042C E8BB000000          <1>     call    enable_cursor
+    24                              <1>     
+    25 00000431 30C0                <1>     xor     al, al
+    26 00000433 30E4                <1>     xor     ah, ah
+    27 00000435 E86B000000          <1>     call    move_cursor         ; move cursor to 0,0
+    28 0000043A 31F6                <1>     xor     esi, esi
+    29 0000043C 66B84224            <1>     mov     ax, ((BG_GREEN | FG_RED) << 8) | 'B'
+    30 00000440 E8B6000000          <1>     call    print_char32
+    31 00000445 BE[54050000]        <1>     mov     esi, msg_welcome32
+    32 0000044A E8EA000000          <1>     call    print_string32
+    33                              <1>         
+    34 0000044F E9FE000000          <1>     jmp     stop
+    35                              <1> 
+    36                              <1> 
+    37                              <1> ; ---------- VGA functions ----------  
+    38                              <1> ; 2000 slot of 80 col and 25 rows, each slot is 2 bytes
+    39                              <1> ; 0xB8000 + (row * 80 + col) * 2 <= position logic
+    40                              <1> 
+    41                              <1> deconstruct_bios_cursor:
+    42                              <1>     ; purpose: it get row and col information from when we are still in 16 bits real mode
+    43                              <1>     ; input: NA
+    44                              <1>     ; out: [current_row], [current_col]
+    45                              <1>     ; clobbered: eax, edx, ecx, flags
+    46                              <1>     ; note: we doesnt care what it clobbered, it call at the start anyway
+    47 00000454 31FF                <1>     xor     edi, edi
+    48 00000456 A1[E4030000]        <1>     mov     eax, [bios_cursor]
+    49 0000045B E82B000000          <1>     call    position_translate  ; return row and col in al ah respectively
+    50 00000460 A2[80050000]        <1>     mov     [current_row], al
+    51 00000465 8825[81050000]      <1>     mov     [current_col], ah
+    52 0000046B C3                  <1>     ret
+    53                              <1> 
+    54                              <1> clear_screen:
+    55                              <1>     ; purpose: clear the screen
+    56                              <1>     ; input: ah <- color
+    57 0000046C BF00800B00          <1>     mov     edi, VGA_buffer_base
+    58 00000471 B020                <1>     mov     al, 0x20            ; white space
+    59 00000473 B9D0070000          <1>     mov     ecx, 2000           ; 2k cells
+    60 00000478 FC                  <1>     cld
+    61 00000479 66F3AB              <1>     rep     stosw
+    62 0000047C C605[80050000]00    <1>     mov     [current_row], 0
+    63 00000483 C605[81050000]00    <1>     mov     [current_col], 0
+    64 0000048A C3                  <1>     ret                         ; es:edi
+    65                              <1> 
+    66                              <1> position_translate:
+    67                              <1>     ; purpose: translate between linear and col/row address
+    68                              <1>     ;        : max input for linear is 2000! and col/row is 25*80!
+    69                              <1>     ; input: linear input -> edi = 0, eax = linear (strictly EAX!)
+    70                              <1>     ;      : col/row input -> edi != 0, al = row, ah = col
+    71                              <1>     ; output: linear input -> al =  row, ah = col
+    72                              <1>     ;       : col/row input -> eax = linear address
+    73 0000048B 51                  <1>     push    ecx                 ; no point in saving eax and edi
+    74 0000048C 85FF                <1>     test    edi, edi
+    75 0000048E 740D                <1>     je      .linear_input
+    76                              <1> 
+    77                              <1> .col_row_input:
+    78                              <1>     ; fall here
+    79 00000490 0FB6CC              <1>     movzx   ecx, ah
+    80 00000493 0FB6C0              <1>     movzx   eax, al
+    81 00000496 6BC050              <1>     imul    eax, 80
+    82 00000499 01C8                <1>     add     eax, ecx            ; (al[row] * 80) + ah[col] in eax
+    83 0000049B 59                  <1>     pop     ecx
+    84 0000049C C3                  <1>     ret
+    85                              <1>     
+    86                              <1> .linear_input:
+    87                              <1>     ; div cl will divide al (16 bits)
+    88 0000049D 66B95000            <1>     mov     cx, 80
+    89 000004A1 F6F1                <1>     div     cl                  ; div 8 bits is actually perfect for this job :D
+    90                              <1>                                 ; al is row and ah is col now
+    91 000004A3 59                  <1>     pop     ecx
+    92 000004A4 C3                  <1>     ret
+    93                              <1> 
+    94                              <1> move_cursor:
+    95                              <1>     ; purpose: well, its move cursor, what more there is to say...
+    96                              <1>     ; input: al = row, ah = col
+    97                              <1>     ; output: NA
+    98                              <1>     ; clobbered: flags
+    99 000004A5 57                  <1>     push    edi
+   100 000004A6 51                  <1>     push    ecx
+   101                              <1> 
+   102 000004A7 A2[80050000]        <1>     mov     [current_row], al
+   103 000004AC 8825[81050000]      <1>     mov     [current_col], ah
+   104                              <1> 
+   105 000004B2 BF01000000          <1>     mov     edi, 1
+   106 000004B7 E8CFFFFFFF          <1>     call    position_translate  ; eax contain linear address
+   107 000004BC 89C1                <1>     mov     ecx, eax
+   108                              <1> 
+   109                              <1>     ; work in 16 bits, VGA card cant understand 32 bits, alledgedly...
+   110 000004BE 66BAD403            <1>     mov     dx, 0x3D4           ; VGA port
+   111 000004C2 B00E                <1>     mov     al, 0x0E            ; register 14 select (high)
+   112 000004C4 EE                  <1>     out     dx, al
+   113                              <1> 
+   114 000004C5 66BAD503            <1>     mov     dx, 0x3D5           ; writing data to VGA
+   115 000004C9 88E8                <1>     mov     al, ch              ; write high byte first
+   116 000004CB EE                  <1>     out     dx, al
+   117                              <1> 
+   118 000004CC 66BAD403            <1>     mov     dx, 0x3D4
+   119 000004D0 B00F                <1>     mov     al, 0x0F            ; register 15 is low byte
+   120 000004D2 EE                  <1>     out     dx, al
+   121                              <1> 
+   122 000004D3 66BAD503            <1>     mov     dx, 0x3D5
+   123 000004D7 88C8                <1>     mov     al, cl
+   124 000004D9 EE                  <1>     out     dx, al
+   125                              <1> 
+   126 000004DA 59                  <1>     pop     ecx
+   127 000004DB 5F                  <1>     pop     edi
+   128 000004DC C3                  <1>     ret
+   129                              <1>     
+   130                              <1> disable_cursor:
+   131 000004DD 66BAD403            <1>     mov     dx, 0x3D4           ; write to port 0x3D4
+   132 000004E1 B00A                <1>     mov     al, 0x0A            ; write to 0A regs (cursor start)
+   133 000004E3 EE                  <1>     out     dx, al
+   134                              <1> 
+   135 000004E4 66BAD503            <1>     mov     dx, 0x3D5           ; port 0x3D5, data send here
+   136 000004E8 B020                <1>     mov     al, 00100000b       ; bit 5 = 1, VGA stop render cursor
+   137 000004EA EE                  <1>     out     dx, al
+   138 000004EB C3                  <1>     ret
+   139                              <1> enable_cursor:
+   140 000004EC 66BAD403            <1>     mov     dx, 0x3D4
+   141 000004F0 B00A                <1>     mov     al, 0x0A
+   142 000004F2 EE                  <1>     out     dx, al
+   143                              <1> 
+   144 000004F3 66BAD503            <1>     mov     dx, 0x3D5
+   145 000004F7 B000                <1>     mov     al, 0x00            ; reset bit 5 to 0
+   146 000004F9 EE                  <1>     out     dx, al
+   147 000004FA C3                  <1>     ret
+   148                              <1>         
+   149                              <1> ; ---------- Print functions ----------  
+   150                              <1> print_char32:
+   151                              <1>     ; purpose: print a single character, in absolute mode a row/col is needed 
+   152                              <1>     ;          but relative will print to cursor
+   153                              <1>     ; input: esi <- mode, ax <- char, if (abs mode) dl = row, dh = col,
+   154                              <1>     ; output: NA
+   155                              <1>     ; clobbered: NA
+   156                              <1>     ; note: ((BG | FG ) << 8 ) | char   should be your format for ax
+   157 000004FB 85F6                <1>     test    esi, esi
+   158 000004FD 7419                <1>     je      .relative           ; print relative to cursor position
+   159                              <1> 
+   160                              <1> .absolute:
+   161                              <1>     ; natually fall here, print to col/row 
+   162 000004FF 50                  <1>     push eax
+   163 00000500 6689D0              <1>     mov     ax, dx
+   164 00000503 BF01000000          <1>     mov     edi, 1              ; this is mode argument for functions!
+   165 00000508 E87EFFFFFF          <1>     call    position_translate  ; linear in eax
+   166 0000050D 8DB800800B00        <1>     lea     edi, [eax + VGA_buffer_base]
+   167 00000513 58                  <1>     pop     eax
+   168 00000514 668907              <1>     mov     word [edi], ax
+   169 00000517 C3                  <1>     ret
+   170                              <1> 
+   171                              <1> .relative:
+   172 00000518 50                  <1>     push    eax
+   173 00000519 A0[80050000]        <1>     mov     al, [current_row]
+   174 0000051E 8A25[81050000]      <1>     mov     ah, [current_col]
+   175 00000524 BF01000000          <1>     mov     edi, 1
+   176 00000529 E85DFFFFFF          <1>     call    position_translate  ; linear in eax
+   177 0000052E 8DB800800B00        <1>     lea     edi, [eax + VGA_buffer_base]    ; VGA_buffer_base is a constant so it treated as a imm!
+   178 00000534 58                  <1>     pop     eax
+   179 00000535 668907              <1>     mov     word [edi], ax
+   180 00000538 C3                  <1>     ret
+   181                              <1>     
+   182                              <1> print_string32:
+   183                              <1>     ; input regs: esi <- pointer, ah <- 0 (deafult) else uses ah as color
+   184                              <1>     ; clobbered regs: NA
+   185 00000539 9C                  <1>     pushf
+   186 0000053A FC                  <1>     cld
+   187 0000053B 6685C0              <1>     test    ax, ax
+   188 0000053E 7502                <1>     jnz     .loop
+   189                              <1>     ; if eax = 0, use default
+   190 00000540 B400                <1>     mov     ah, ((BG_BLACK | FG_WHITE) << 8) 
+   190          ******************  <1>  warning: byte exceeds bounds [-w+number-overflow]
+   191                              <1> .loop:
+   192 00000542 AC                  <1>     lodsb                       ; Load next word from ESI into AL
+   193 00000543 3C00                <1>     cmp     al, 0
+   194 00000545 7409                <1>     je      .done
+   195 00000547 31F6                <1>     xor     esi, esi
+   196 00000549 E8ADFFFFFF          <1>     call    print_char32        ; writing relative
+   197 0000054E EBF2                <1>     jmp     .loop
+   198                              <1> .done: 
+   199 00000550 9D                  <1>     popf
+   200 00000551 C3                  <1>     ret
+   201                              <1> 
+   202                              <1> stop:
+   203                              <1>     ; function for debugging 
+   204                              <1>     .loop:
+   205 00000552 EBFE                <1>     jmp     .loop
+   206                              <1> 
+   207 00000554 537563636573736675- <1> msg_welcome32       db      "Successfully enter 32bits protected mode.", 13, 10, 0
+   207 0000055D 6C6C7920656E746572- <1>
+   207 00000566 203332626974732070- <1>
+   207 0000056F 726F74656374656420- <1>
+   207 00000578 6D6F64652E0D0A00    <1>
+   208                              <1> 
+   209                              <1> VGA_buffer_base     equ     0xb8000
+   210 00000580 00                  <1> current_row         db      0x00000
+   211 00000581 00                  <1> current_col         db      0x00000
+   212                              <1> 
+   213                              <1> ; Foreground Colors
+   214                              <1> FG_BLACK            equ 0x00
+   215                              <1> FG_BLUE             equ 0x01
+   216                              <1> FG_GREEN            equ 0x02
+   217                              <1> FG_CYAN             equ 0x03
+   218                              <1> FG_RED              equ 0x04
+   219                              <1> FG_MAGENTA          equ 0x05
+   220                              <1> FG_BROWN            equ 0x06
+   221                              <1> FG_LIGHT_GRAY       equ 0x07
+   222                              <1> FG_DARK_GRAY        equ 0x08
+   223                              <1> FG_LIGHT_BLUE       equ 0x09
+   224                              <1> FG_LIGHT_GREEN      equ 0x0A
+   225                              <1> FG_LIGHT_CYAN       equ 0x0B
+   226                              <1> FG_LIGHT_RED        equ 0x0C
+   227                              <1> FG_LIGHT_MAGENTA    equ 0x0D
+   228                              <1> FG_YELLOW           equ 0x0E
+   229                              <1> FG_WHITE            equ 0x0F
+   230                              <1> 
+   231                              <1> ; Background Colors
+   232                              <1> BG_BLACK            equ 0x00
+   233                              <1> BG_BLUE             equ 0x10
+   234                              <1> BG_GREEN            equ 0x20
+   235                              <1> BG_CYAN             equ 0x30
+   236                              <1> BG_RED              equ 0x40
+   237                              <1> BG_MAGENTA          equ 0x50
+   238                              <1> BG_BROWN            equ 0x60
+   239                              <1> BG_LIGHT_GRAY       equ 0x70
+   240                              <1> BG_BLINKING         equ 0x80 ; this add blinking, need to do a ADD
+   358 00000582 00<rep A7Eh>            times 4096-($-$$)   db      0
