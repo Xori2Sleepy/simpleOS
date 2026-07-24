@@ -33,6 +33,15 @@ protected32_entry:
 ;   jmp    stop
     xor     ah, ah
     mov     esi, msg_welcome32
+    call    print_string32 
+
+
+    xor     eax, eax
+    mov     al, 24
+    call    move_cursor         ; move to row 24, col 0
+
+    xor     ah, ah              ; defualt color
+    mov     esi, msg_test_wrap
     call    print_string32
         
     jmp     stop
@@ -137,7 +146,7 @@ move_cursor:
     mov     byte [current_col], ah
 
     mov     edi, 1
-    call    position_translate  ; eax contain linear address
+    call    position_translate  ; return linear address in eax
     mov     ecx, eax
 
     ; work in 16 bits, VGA card cant understand 32 bits, alledgedly...
@@ -183,24 +192,32 @@ enable_cursor:
     ret
 
 grid_normalization:
-    ; purpose: normalized grid input (row and col) to make it actually make sense
-    ; input: al = row, ah = col
+    ; purpose: normalized grid input (row and col) to make it actually make sense. (basically wrapping logic)
+    ; input: al = row, ah = col | edi = mode
     ; output: al = row, ah = col ; but normalized! (why am i writing a comment inside a comment???)
     ; note: DEFINITELY NEED TO IMPROVE THIS, THIS IS SHIT CODE BRO
-    ;     : add more mode
-    cmp     ah, col_limit
-    je      .normalize_col
+    ;     : add more mode. broken too
+    ;     : edi mode select
+
     cmp     al, row_limit
-    je      .normalize_row
-    ret
+    jb     .passed
+    cmp     ah, col_limit
+    jbe    .passed
+
+.normalize_row:
+    sub     al, row_limit
+    sub     ah, (col_limit + 1)
+    jmp     grid_normalization
 
 .normalize_col:
     sub     ah, col_limit
     add     al, 1
     jmp     grid_normalization
-.normalize_row:
-    sub     al, row_limit
-    jmp     grid_normalization
+
+.passed
+    cmp     al, col_limit
+    jae     .normalize_col
+    ret
 
 ; ---------- Print functions ----------  
 print_char32:
@@ -277,7 +294,7 @@ print_string32:
     call    print_char32        ; if even the author is confused by his own function
     pop     esi                 ; i cant begin to imagine the nightmare other potential contributor will have
 
-    mov     eax, 0xFFFFFFFF     ; we can just uses '-1' but this is more intuitive
+    mov     eax, -1             ; it basically just 0xFFFFFFFF
     xor     al, al              ; this is preparing confusing argument for move_cursor...
     mov     ah, 1
     call    move_cursor
@@ -308,6 +325,9 @@ stop:
     jmp     .loop
 
 msg_welcome32       db      "Ruccessfully enter 32bits protected mode.", 13, 10, 0
+msg_test_wrap       db      "Testing screen wrapping mechanism right now we need to fill in"
+                    db      " alot of stuff blah blah balh blah blah skibidi 67 i am brain rotted"
+                    db      " grr holy cow boy what the fuck lingan guu lingan guu blah 91238123098", 13, 10, 0
 
 VGA_buffer_base     equ     0xb8000
 row_limit           equ     24
