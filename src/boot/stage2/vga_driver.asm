@@ -254,6 +254,7 @@ print_string32:
     ; clobbered regs: NA
     pushf
     cld
+    xor     cx, cx      ; note buffer counter
     mov     dh, ah      ; use provide color, overwrite if needed
     test    ah, ah
     jnz     .loop
@@ -306,7 +307,7 @@ print_string32:
 
 stop:
     ; function for debugging 
-    .loop:
+.loop:
     jmp     .loop
 
 msg_welcome32       db      "Ruccessfully enter 32bits protected mode.", 13, 10, 0
@@ -319,6 +320,8 @@ row_limit           equ     24
 col_limit           equ     79
 current_row         db      0x00000
 current_col         db      0x00000
+
+note_buffer         dd      0
 
 ; Foreground Colors
 FG_BLACK            equ     0x00

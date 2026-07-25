@@ -115,7 +115,7 @@ counter     db      4
 boot_drive  db      0
 msg         db      "Bootloader loaded! Attemp to load the second stage bootloader...", 13, 10, 0
 msg_disk_er db      "Disk read error! Error code: ", 0 
-msg_disk_sc db      "Disk read success! Starting second stage bootloader...", 13, 10, 0
+msg_disk_sc db      "Disk read success! Jumping to 16 bits real mode", 13, 10, 0
 msg_rs_fail db      "Fatal Error: Disk controller reset fail!", 13, 10, 0
 msg_halt    db      "CPU halting...", 13, 10, 0
 hex_map     db      "0123456789ABCDEF"      ; it used for xlat
