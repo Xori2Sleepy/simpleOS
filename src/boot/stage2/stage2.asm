@@ -1,20 +1,6 @@
 [bits 16]
 [org 0x7E00]
 
-global  null_descriptor
-global  kernelcode_32bits_descriptor
-global  kernelcode_64bits_descriptor
-global  kerneldata_32bits_descriptor
-
-null_descriptor                     equ      0x00
-kernelcode_32bits_descriptor        equ      0x08
-kernelcode_64bits_descriptor        equ      0x10
-kerneldata_32bits_descriptor        equ      0x18
-
-E820_signature      equ     0x534D4150
-E820_entry_size     equ     24
-
-
 ; input: base, limit, access bytes, flags
 %macro gdt_entries 4
     dw      %2 & 0xFFFF         ; limit is 20 bits we only need first 16 here
@@ -38,17 +24,25 @@ stage2_entry:
     
     mov     [boot_info.boot_drive], dl
 
-    mov     al, 13
-    call    print_char          ; function doesnt clobbered anything, al resuable!
-    mov     al, 10
-    call    print_char
+    mov     si, msg_stage2_entry
+    call    print_loop
 
-    mov     si, msg
+    mov     si, msg_attempt_cpuid
+    call    print_loop
+    call    get_cpuid
+
+    mov     si, msg_attempt_a20
     call    print_loop
     call    enable_a20
-    call    detect_memory_e820
-    call    get_bios_cursor      ; need before jumping, make sure no write to buffer after this!
 
+    mov     si, msg_attempt_e820
+    call    print_loop
+    call    detect_memory_e820
+
+    call    get_bios_cursor     ; need before jumping, make sure no write to buffer after this!
+    
+    mov     si, msg_gdt
+    call    print_loop
     ; coming for 32 mode. finally, I have escape the shackle of 16 bits programing!
     cli
     in      al, 0x70            ; Read current CMOS state
@@ -59,7 +53,13 @@ stage2_entry:
     lgdt    [gdt_descriptor]    ; loading gdt to gdtr
     mov     eax, cr0            ; I just discover that I can use 32 bits regs in real mode...
     or      eax, 1              ; turn the first bits of cr0 on (Protection Enable, PE bits)
+
+
+    mov     si, msg_far_jump    ; print stuff before interupt cant be call!
+    call    print_loop
+
     mov     cr0, eax            ; protected mode officially on
+
 
     jmp     kernelcode_32bits_descriptor:protected32_entry
 
@@ -130,7 +130,6 @@ enable_a20:
     call    print_loop
     call    halt                ; if it truly fail there is not point to let the code run wild,
                                 ; halting is the best and most responsible option
-
 .a20_done:
     mov     si, msg_a20_success
     call    print_loop
@@ -245,7 +244,9 @@ detect_memory_e820:
 
     cmp     dword [boot_info.entry_count], 0
     jz      .failed             ; if we got nothing in map it fail
-
+    
+    mov     si, msg_e820_success
+    call    print_loop
     ret
 
 .failed:
@@ -287,7 +288,161 @@ get_bios_cursor:
 
 ; ---------------- CPUID functions -------------------
 get_cpuid:
+    pushfd
+    pushfd
+    xor     dword [esp], 0x00200000
+    popfd                   ; flags updated
+    pushfd
+    pop     eax             ; save flags in eax
+    xor     eax, [esp]      ; compare it with original flags
+    popfd                   ; restore original flags
+    and     eax, 0x00200000 ; now compare eax with 0x00200000. also we do this to isolate that bit
+                            ; if zero mean our change did not apply
+                            ; so cpuid is not avaliable
+    jz      .unavailable
+    jnz     .avaliable
+
+.unavailable:
+    mov     di, msg_cpuid_unavailable
+    call    print_loop
+    call    halt
+    ret
+
+.avaliable:
+    call    cpu_leaf0_detection
+    call    max_extended_detection
+    call    cpu_leaf1_detection
+    call    cpu_leaf7_detection
+    call    cpu_xleaf2to4_detection        ; xleaf for extended leaf (0x80000000+)
+    ret
     
+cpu_leaf0_detection:
+    xor     eax, eax
+    cpuid                   ; vendor id in EBX EDX ECX
+    mov     dword [boot_info.cpu_max_leaf], eax     ; store max leaf, uses later
+    mov     [CPUID_VENDOR_BUFFER], ebx
+    mov     [CPUID_VENDOR_BUFFER + 4], edx
+    mov     [CPUID_VENDOR_BUFFER + 8], ecx
+    xor     edi, edi
+.loop:
+    mov     ebx, [CPUID_VENDOR_TABLE + edi]
+    mov     edx, [CPUID_VENDOR_TABLE + edi + 4]
+    mov     ecx, [CPUID_VENDOR_TABLE + edi + 8]     ; load first entry
+
+    cmp     ebx, [CPUID_VENDOR_BUFFER] 
+    jne     .cont
+    cmp     edx, [CPUID_VENDOR_BUFFER + 4]
+    jne     .cont
+    cmp     ecx, [CPUID_VENDOR_BUFFER + 8]
+    jne     .cont
+
+    ; if equal fall here
+.equal:
+
+    mov     [boot_info.vendor_name], ebx
+    mov     [boot_info.vendor_name + 4], edx
+    mov     [boot_info.vendor_name + 8], ecx
+
+    mov     ax, di
+    xor     dx, dx
+    mov     cx, 12
+    div     cx         ; divide DX:AX by 12. AX hold answer
+
+    mov     di, ax
+    xor     ax, ax
+    mov     al, [CPUID_VENDOR_CATEGORY + di]
+    mov     [boot_info.vendor_category], al
+    ret
+
+.cont:
+    add     edi, 12     ; add 12 byte to base pointer, next entries
+    cmp     edi, CPUID_VENDOR_TABLE_SIZE
+    jae     .unknown_vendor
+    jmp     .loop
+
+.unknown_vendor:
+    ; we store 0 if it just unknown
+    mov     [boot_info.vendor_name], 0
+    mov     [boot_info.vendor_name + 4], 0
+    mov     [boot_info.vendor_name + 8], 0
+    mov     [boot_info.vendor_category], 0
+    mov     si, msg_cpuid_unknown_vendor
+    call    print_loop
+    ret
+
+max_extended_detection:
+    mov     eax, 0x80000000
+    cpuid
+    mov     dword [boot_info.cpu_max_x_leaf], eax
+    ret
+
+cpu_leaf1_detection:
+    cmp     dword [boot_info.cpu_max_leaf], 1
+    jb      .failed
+    mov     eax, 1
+    cpuid
+    mov     [boot_info.cpu_signature], eax
+    mov     [boot_info.cpu_features1_ecx], ecx
+    mov     [boot_info.cpu_features1_edx], edx
+.done:
+    mov     si, msg_cpuid_leaf1_success
+    call    print_loop
+    ret
+.failed:
+    mov     si, msg_cpuid_leaf1_failed
+    call    print_loop
+    ret
+
+cpu_leaf7_detection:
+    cmp     dword [boot_info.cpu_max_leaf], 1
+    jb      .failed
+    mov     eax, 7
+    xor     ecx, ecx
+    cpuid
+    mov     [boot_info.cpu_features7_ebx], ebx
+    mov     [boot_info.cpu_features7_ecx], ecx
+    mov     [boot_info.cpu_features7_edx], edx
+.done:
+    mov     si, msg_cpuid_leaf7_success
+    call    print_loop
+    ret
+.failed:
+    mov     si, msg_cpuid_leaf7_failed
+    call    print_loop
+    ret
+
+cpu_xleaf2to4_detection:
+    cmp     [boot_info.cpu_max_x_leaf], 0x80000000
+    jb      .failed         ; if no extended feature we failed, it, this is to prevent oveflow/underflow error
+    cmp     [boot_info.cpu_max_x_leaf], 0x80000004
+    jb      .failed
+
+    mov     eax, 0x80000002         ; copy eax, ebx, ecx, edx
+    cpuid
+    mov     [boot_info.brand_string], eax
+    mov     [boot_info.brand_string + 4], ebx
+    mov     [boot_info.brand_string + 8], ecx
+    mov     [boot_info.brand_string + 12], edx
+    mov     eax, 0x80000003
+    mov     [boot_info.brand_string + 16], eax
+    mov     [boot_info.brand_string + 20], ebx
+    mov     [boot_info.brand_string + 24], ecx
+    mov     [boot_info.brand_string + 28], edx
+    mov     eax, 0x80000004
+    mov     [boot_info.brand_string + 32], eax
+    mov     [boot_info.brand_string + 36], ebx
+    mov     [boot_info.brand_string + 40], ecx
+    mov     [boot_info.brand_string + 44], edx
+.done:
+    mov     si, msg_cpuid_xleaf2to4_success
+    call    print_loop
+    ret
+.failed:
+    mov     si, msg_cpuid_xleaf2to4_failed
+    call    print_loop
+    ret
+
+
 ; ---------- functions ----------
 ; general purpose function | CRITICAL: USE ONLY IN REAL MODE! 
 ; IT WILL CRASH IF TRY ON PROTECTED MODE!
@@ -350,25 +505,30 @@ print_error:
     pop     ax
     ret
 
-; -------------------- variable space --------------------
-align 16            ; does it even matter?
-msg                 db      "Second Stage bootloader succesfully loaded! Attempting to enable A20...", 13, 10, 0
-msg_e820_success    db      "E820 memory mapping success! Attemp to far jump!", 13, 10, 0
-msg_e820_failed     db      "E820 memory mapping failed; System can not be load safely: Halting CPU..."
-msg_a20_success     db      "A20 successfully initialize! Attempt to build memory map...", 13, 10, 0
-msg_a20_failed      db      "CRITICAL: Attempted all reliable method. If you see this message, the only way to continue "
-                    db      "is to dig up the bootloader code and manually uncomment other method. Good Luck!", 13, 10, 0
-                    db      "CRITICAL: A20 can not be enable; system can not be safely load: Halting CPU...", 13, 10, 0
-msg_cpu_halted      db      "CRITICAL: CPU halted! Please reboot the PC", 13, 10, 0
-msg_bios_a20_failed db      "BIOS A20 initialization failed. Error code: ", 13, 10, 0
-msg_bios_a20_cont   db      "Attempt other known method for A20 initiation...", 13, 10, 0
-msg_kb_ctrl_failed  db      "Keyboard controller A20 initiation failed. Attmepting other known method...", 13, 10, 0
-msg_ff_failed       db      "System Control Port A A20 initiation failed!", 13, 10
+; --------------------  boot info ------------------------
+align 8
+boot_info:
+    .boot_drive         db      0
+    .entry_count        dd      0
 
-hex_map             db      "0123456789ABCDEF"
+    .reserved       times 3     db      0   ; for alignment
 
-global  bios_cursor
-bios_cursor         dd      0x0
+    ;cpuid subsection
+    .cpu_features1_ecx  dd      0
+    .cpu_features1_edx  dd      0
+    .cpu_features7_ebx  dd      0
+    .cpu_features7_ecx  dd      0
+    .cpu_features7_edx  dd      0
+    .cpu_max_leaf       dd      0
+    .cpu_max_x_leaf     dd      0
+    .cpu_signature      dd      0
+    .vendor_category    db      0
+
+    .vendor_name    times 3     dd      0
+    .brand_string   times 48    db      0
+
+    align 8
+    .memory_map     times 64 * 24       db      0
 
 ; -------------------- gdt space ------------------------
 align 8
@@ -406,19 +566,122 @@ gdt_descriptor:
     ; for lgdt, 6 byte, first 2 must be size and last 4 must be gdt address
     dw      gdt_end - gdt_start - 1         ; gdt size - 1
     dd      gdt_start
-; --------------------------------------------------------
 
-align 8
-boot_info:
-.boot_drive         db      0
-.entry_count        dd      0
-.reserved   times 3 db      0   ; for alignment
-.cpu_ecx            dd      0   ; cpuid stuff
-.cpu_edx            dd      0
+; -------------------- CPUID TABLE --------------------
+CPUID_VENDOR_TABLE:
+    ; AMD
+    CPUID_VENDOR_AMD        db      "AuthenticAMD"
+    CPUID_VENDOR_AMD_OLD    db      "AMDisbetter!"      ; I agree bro
+    CPUID_VENDOR_HYGON      db      "HygonGenuine"
 
-align 8
-.memory_map:
-times 64 * 24       db      0
+    ; Intel
+    CPUID_VENDOR_INTEL      db      "GenuineIntel"      ; step up your game, your name suck
+
+    ; Intel Compatable
+    CPUID_VENDOR_VIA        db      "VIA VIA VIA "      ; worst one yet
+    CPUID_VENDOR_TRANSMETA  db      "GenuineTMx86"
+    CPUID_VENDOR_TRANSMETA_OLD      db      "TransmetaCPU"
+    CPUID_VENDOR_CYRIX      db      "CyrixInstead"
+    CPUID_VENDOR_CENTAUR    db      "CentaurHauls"
+    CPUID_VENDOR_NEXGEN     db      "NexGenDriven"
+    CPUID_VENDOR_UMC        db      "UMC UMC UMC "
+    CPUID_VENDOR_SIS        db      "SIS SIS SIS "
+    CPUID_VENDOR_NSC        db      "Geode by NSC"      ; i feel like i heard about Geode from somewhere...
+    CPUID_VENDOR_RISE       db      "RiseRiseRise"
+    CPUID_VENDOR_ZHAOXIN    db      "  Shanghai  "
+
+    ; Embeded / Other
+    CPUID_VENDOR_VORTEX     db      "Vortex86 SoC"
+    CPUID_VENDOR_ELBRUS     db      "E2L MACHINE "
+    CPUID_VENDOR_A0486      db      "MiSTer A0486"
+    CPUID_VENDOR_A0486_OLD  db      "GenuineA0486"
+
+    ; Hypervisors CPUID
+    CPUID_VENDOR_QEMU       db      "TCGTCGTCGTCG"
+    CPUID_VENDOR_KVM        db      " KVMKVMKVM "
+    CPUID_VENDOR_VMWARE     db      "VMwareVMware"
+    CPUID_VENDOR_VIRTUALBOX db      "VBoxVBoxVBox"
+    CPUID_VENDOR_XEN        db      "XenVMMXenVMM"
+    CPUID_VENDOR_HYPERV     db      "Microsoft HV"
+    CPUID_VENDOR_PARALLELS  db      " prl hyperv "
+    CPUID_VENDOR_PARALLELS_ALT      db      " lrpepyh vr "  ; we need alt because sometime endianess mismatch
+    CPUID_VENDOR_BHYVE      db      "bhyve bhyve "
+    CPUID_VENDOR_QNX        db      " QNXQVMBSQG "
+
+CPUID_VENDOR_CATEGORY:
+    times 3     db      CPUID_AMD_CATEGORY
+    times 1     db      CPUID_INTEL_CATEGORY
+    times 11    db      CPUID_INTEL_COMPATIBLE
+    times 4     db      CPUID_OTHER_CATEGORY
+    times 10    db      CPUID_HYPERVISOR
+
+CPUID_VENDOR_BUFFER:
+    times 3     dd      0   ; 12 byte buffer
+
+; -------------------- variable space --------------------
+align 16            ; does it even matter?
+; general
+msg_stage2_entry    db      "Second stage active: Executing Instruction ", 13, 10, 0
+msg_cpu_halted      db      "CRITICAL: CPU halted! Please reboot the PC", 13, 10, 0
+msg_far_jump        db      "Preparation complete: Enabling CR0 and attempting a far jump to 32 bits protected mode; Brace for impact and good luck 32 bits code! :)", 13, 10, 0
+msg_gdt             db      "Global Description Table structure defined, loading it to register...", 13, 10, 0
+
+; e820
+msg_e820_success    db      "E820 memory mapping success!", 13, 10, 0
+msg_e820_failed     db      "E820 memory mapping failed; System can not be load safely: Halting CPU..."
+
+; a20
+msg_a20_success     db      "A20 successfully initialize!", 13, 10, 0
+msg_a20_failed      db      "CRITICAL: Attempted all reliable method. If you see this message, the only way to continue "
+                    db      "is to dig up the bootloader code and manually uncomment other method. Good Luck!", 13, 10, 0
+                    db      "CRITICAL: A20 can not be enable; system can not be safely load: Halting CPU...", 13, 10, 0
+msg_bios_a20_failed db      "BIOS A20 initialization failed. Error code: ", 13, 10, 0
+msg_bios_a20_cont   db      "Attempt other known method for A20 initiation...", 13, 10, 0
+msg_kb_ctrl_failed  db      "Keyboard controller A20 initiation failed. Attmepting other known method...", 13, 10, 0
+msg_ff_failed       db      "System Control Port A A20 initiation failed!", 13, 10
+
+; attempt
+msg_attempt_a20     db      "Attempting to enable A20: ", 0
+msg_attempt_e820    db      "Attempting to build memory map: ", 0
+msg_attempt_cpuid   db      "Attempting to fetch data from CPUID: ", 13, 10, 0
+
+; cpuid stuff
+msg_cpuid_unavailable       db      "   CPUID: CPUID feature is unavailable, can not obtain nessary information: Halting CPU.", 13, 10, 0
+msg_cpuid_unknown_vendor    db      "   CPUID: Attempt to detect CPU architecture return unknown vendor!", 13, 10, 0
+msg_cpuid_leaf1_failed      db      "   CPUID: Leaf 1 unavailable: Unable to detect CPU Signature and Base Feature Flags!", 13, 10, 0
+msg_cpuid_leaf1_success     db      "   CPUID: CPU Signature and Base Feature Flags detection success!", 13, 10, 0
+msg_cpuid_leaf7_failed      db      "   CPUID: Leaf 7 unavailable: Unable to detect extended feature flags!", 13, 10, 0
+msg_cpuid_leaf7_success     db      "   CPUID: Extended Feature Flags detection success!", 13, 10, 0
+msg_cpuid_xleaf2to4_failed  db      "   CPUID: Failed to fetch CPU Brand Label", 13, 10, 0
+msg_cpuid_xleaf2to4_success db      "   CPUID: Successfully fetch CPU Brand Label", 13, 10, 0      
+
+; -------------------- random constant space --------------------
+
+
+global  bios_cursor
+global  null_descriptor
+global  kernelcode_32bits_descriptor
+global  kernelcode_64bits_descriptor
+global  kerneldata_32bits_descriptor
+
+hex_map                             db      "0123456789ABCDEF"
+
+CPUID_AMD_CATEGORY                  equ     1
+CPUID_INTEL_CATEGORY                equ     2
+CPUID_INTEL_COMPATIBLE              equ     3
+CPUID_OTHER_CATEGORY                equ     4
+CPUID_HYPERVISOR                    equ     5
+CPUID_VENDOR_COUNT                  equ     29
+CPUID_VENDOR_TABLE_SIZE             equ     CPUID_VENDOR_COUNT * 12
+
+E820_signature                      equ     0x534D4150
+E820_entry_size                     equ     24
+
+bios_cursor                         dd      0x0
+null_descriptor                     equ     0x00
+kernelcode_32bits_descriptor        equ     0x08
+kernelcode_64bits_descriptor        equ     0x10
+kerneldata_32bits_descriptor        equ     0x18
 
 ; ---------- just other stuff ----------
 %include "src/boot/stage2/protected32.asm"  ; we seperate the 32bit code, look cleaner. It already a mess here.

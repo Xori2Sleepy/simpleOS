@@ -35,7 +35,6 @@ protected32_entry:
     mov     esi, msg_welcome32
     call    print_string32 
 
-
     xor     eax, eax
     mov     al, 24
     call    move_cursor         ; move to row 24, col 0
