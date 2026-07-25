@@ -11,9 +11,65 @@ kernelcode_32bits_descriptor        equ      0x08
 kernelcode_64bits_descriptor        equ      0x10
 kerneldata_32bits_descriptor        equ      0x18
 
-E820_signature      equ     0x534D4150
-E820_entry_size     equ     24
+E820_signature          equ     0x534D4150
+E820_entry_size         equ     24
 
+CPUID_VENDOR_BUFFER:
+            times 3     dd      0   ; 12 byte buffer
+CPUID_VENDOR_COUNT      equ     29
+CPUID_VENDOR_TABLE_SIZE equ     CPUID_VENDOR_COUNT * 12
+CPUID_AMD_CATEGORY      equ     1
+CPUID_INTEL_CATEGORY    equ     2
+CPUID_INTEL_COMPATIBLE  equ     3
+CPUID_OTHER_CATEGORY    equ     4
+CPUID_HYPERVISOR        equ     5
+
+CPUID_VENDOR_TABLE:
+    ; AMD
+    CPUID_VENDOR_AMD        db      "AuthenticAMD"
+    CPUID_VENDOR_AMD_OLD    db      "AMDisbetter!"      ; I agree bro
+    CPUID_VENDOR_HYGON      db      "HygonGenuine"
+
+    ; Intel
+    CPUID_VENDOR_INTEL      db      "GenuineIntel"      ; step up your game, your name suck
+
+    ; Intel Compatable
+    CPUID_VENDOR_VIA        db      "VIA VIA VIA "      ; worst one yet
+    CPUID_VENDOR_TRANSMETA  db      "GenuineTMx86"
+    CPUID_VENDOR_TRANSMETA_OLD      db      "TransmetaCPU"
+    CPUID_VENDOR_CYRIX      db      "CyrixInstead"
+    CPUID_VENDOR_CENTAUR    db      "CentaurHauls"
+    CPUID_VENDOR_NEXGEN     db      "NexGenDriven"
+    CPUID_VENDOR_UMC        db      "UMC UMC UMC "
+    CPUID_VENDOR_SIS        db      "SIS SIS SIS "
+    CPUID_VENDOR_NSC        db      "Geode by NSC"      ; i feel like i heard about Geode from somewhere...
+    CPUID_VENDOR_RISE       db      "RiseRiseRise"
+    CPUID_VENDOR_ZHAOXIN    db      "  Shanghai  "
+
+    ; Embeded / Other
+    CPUID_VENDOR_VORTEX     db      "Vortex86 SoC"
+    CPUID_VENDOR_ELBRUS     db      "E2L MACHINE "
+    CPUID_VENDOR_A0486      db      "MiSTer A0486"
+    CPUID_VENDOR_A0486_OLD  db      "GenuineA0486"
+
+    ; Hypervisors CPUID
+    CPUID_VENDOR_QEMU       db      "TCGTCGTCGTCG"
+    CPUID_VENDOR_KVM        db      " KVMKVMKVM "
+    CPUID_VENDOR_VMWARE     db      "VMwareVMware"
+    CPUID_VENDOR_VIRTUALBOX db      "VBoxVBoxVBox"
+    CPUID_VENDOR_XEN        db      "XenVMMXenVMM"
+    CPUID_VENDOR_HYPERV     db      "Microsoft HV"
+    CPUID_VENDOR_PARALLELS  db      " prl hyperv "
+    CPUID_VENDOR_PARALLELS_ALT      db      " lrpepyh vr "  ; we need alt because sometime endianess mismatch
+    CPUID_VENDOR_BHYVE      db      "bhyve bhyve "
+    CPUID_VENDOR_QNX        db      " QNXQVMBSQG "
+
+CPUID_VENDOR_CATEGORY:
+    times 3     db      CPU_AMD_CATEGORY
+    times 1     db      CPU_INTEL_CATEGORY
+    times 11    db      CPU_INTEL_COMPATIBLE
+    times 4     db      CPU_OTHER_CATEGORY
+    times 10    db      CPU_HYPERVISOR
 
 ; input: base, limit, access bytes, flags
 %macro gdt_entries 4
@@ -47,7 +103,7 @@ stage2_entry:
     call    print_loop
     call    enable_a20
     call    detect_memory_e820
-    call    get_bios_cursor      ; need before jumping, make sure no write to buffer after this!
+    call    get_bios_cursor     ; need before jumping, make sure no write to buffer after this!
 
     ; coming for 32 mode. finally, I have escape the shackle of 16 bits programing!
     cli
@@ -299,14 +355,69 @@ get_cpuid:
                             ; if zero mean our change did not apply
                             ; so cpuid is not avaliable
     jz      .unavailable
+    jnz     .avaliable
 
 .available:
     ; natually fall here
+    xor     eax, eax
+    cpuid                   ; vendor id in EBX EDX ECX
+    mov     [boot_info.cpu_max_leaf], al            ; store max leaf, uses later
+    mov     [CPUID_VENDOR_BUFFER], ebx
+    mov     [CPUID_VENDOR_BUFFER + 4], edx
+    mov     [CPUID_VENDOR_BUFFER + 8], ecx
+    xor     edi, edi
+.loop:
+    mov     ebx, [CPUID_VENDOR_TABLE + edi]
+    mov     edx, [CPUID_VENDOR_TABLE + edi + 4]
+    mov     ecx, [CPUID_VENDOR_TABLE + edi + 8]     ; load first entry
 
+    cmp     ebx, [CPUID_VENDOR_BUFFER] 
+    jne     .cont
+    cmp     edx, [CPUID_VENDOR_BUFFER + 4]
+    jne     .cont
+    cmp     ecx, [CPUID_VENDOR_BUFFER + 8]
+    jne     .cont
 
+    ; if equal fall here
+.equal:
+    mov     ax, di
+    xor     dx, dx
+    mov     cx, 12
+    div     cx         ; divide DX:AX by 12. AX hold answer
 
-
+    mov     di, ax
+    xor     ax, ax
+    mov     al, [CPUID_VENDOR_CATEGORY + di]
     
+    cmp     al, 1
+    je      .amd
+    cmp     al, 2
+    je      .intel
+    cmp     al, 3
+    je      .intel_compatible
+    cmp     al, 4
+    je      .other
+    cmp     al, 5
+    je      .hypervisor
+
+.cont:
+    add     edi, 12     ; add 12 byte to base pointer, next entries
+    cmp     edi, CPU_VENDOR_TALE_SIZE
+    jae     .unknown_vendor
+    jmp     .loop
+
+.unknown_vendor:
+
+.amd:
+
+.intel:
+
+.intel_compatible:
+
+.other:
+
+.hypervisor:
+
 ; ---------- functions ----------
 ; general purpose function | CRITICAL: USE ONLY IN REAL MODE! 
 ; IT WILL CRASH IF TRY ON PROTECTED MODE!
@@ -434,6 +545,7 @@ boot_info:
 .reserved   times 3 db      0   ; for alignment
 .cpu_ecx            dd      0   ; cpuid stuff
 .cpu_edx            dd      0
+.cpu_max_leaf       db      0
 
 align 8
 .memory_map:
