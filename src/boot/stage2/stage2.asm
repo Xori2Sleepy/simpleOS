@@ -357,11 +357,17 @@ get_cpuid:
     jz      .unavailable
     jnz     .avaliable
 
-.available:
-    ; natually fall here
+.avaliable:
+    call    cpu_leaf0_detection
+    call    max_extended_detection
+    call    cpu_leaf1_detection
+    call    cpu_leaf7_detection
+    call    cpu_xleaf2to4_detection        ; xleaf for extended leaf (0x80000000+)
+    
+cpu_leaf0_detection:
     xor     eax, eax
     cpuid                   ; vendor id in EBX EDX ECX
-    mov     [boot_info.cpu_max_leaf], al            ; store max leaf, uses later
+    mov     dword [boot_info.cpu_max_leaf], eax     ; store max leaf, uses later
     mov     [CPUID_VENDOR_BUFFER], ebx
     mov     [CPUID_VENDOR_BUFFER + 4], edx
     mov     [CPUID_VENDOR_BUFFER + 8], ecx
@@ -380,6 +386,11 @@ get_cpuid:
 
     ; if equal fall here
 .equal:
+
+    mov     [boot_info.vendor], ebx
+    mov     [boot_info.vendor + 4], edx
+    mov     [boot_info.vendor + 8], ecx
+
     mov     ax, di
     xor     dx, dx
     mov     cx, 12
@@ -388,17 +399,8 @@ get_cpuid:
     mov     di, ax
     xor     ax, ax
     mov     al, [CPUID_VENDOR_CATEGORY + di]
-    
-    cmp     al, 1
-    je      .amd
-    cmp     al, 2
-    je      .intel
-    cmp     al, 3
-    je      .intel_compatible
-    cmp     al, 4
-    je      .other
-    cmp     al, 5
-    je      .hypervisor
+    mov     [boot_info.vendor_category], al
+    ret
 
 .cont:
     add     edi, 12     ; add 12 byte to base pointer, next entries
@@ -406,17 +408,85 @@ get_cpuid:
     jae     .unknown_vendor
     jmp     .loop
 
-.unknown_vendor:
+.unknown_vendor
+    ; we store 0 if it just unknown
+    mov     [boot_info.vendor_name], 0
+    mov     [boot_info.vendor_name + 4], 0
+    mov     [boot_info.vendor_name + 8], 0
+    mov     [boot_info.vendor_category], 0
+    mov     si, msg_cpuid_unknown_vendor
+    call    print_loop
+    ret
 
-.amd:
+max_extended_detection:
+    mov     eax, 0x80000000
+    cpuid
+    mov     dword [boot_info.cpu_max_x_leaf], eax
+    ret
 
-.intel:
+cpu_leaf1_detection:
+    cmp     dword [boot_info.cpu_max_leaf], 1
+    jb      .failed
+    mov     eax, 1
+    cpuid
+    mov     [boot_info.cpu_signature], eax
+    mov     [boot_info.cpu_features1_ecx], ecx
+    mov     [boot_info.cpu_features1_cdx], edx
+.done:
+    mov     di, msg_cpuid_leaf1_success
+    call    print_loop
+    ret
+.failed:
+    mov     di, msg_cpuid_leaf1_failed
+    call    print_loop
+    ret
 
-.intel_compatible:
+cpu_leaf7_detection:
+    cmp     dword [boot_info.cpu_max_leaf], 1
+    jb      .failed
+    mov     eax, 7
+    xor     ecx, ecx
+    cpuid
+    mov     [boot_info.cpu_features7_ebx], ebx
+    mov     [boot_info.cpu_features7_ecx], ecx
+    mov     [boot_info.cpu_features7_edx], edx
+.done:
+    mov     di, msg_cpuid_leaf7_success
+    call    print_loop
+    ret
+.failed:
+    mov     di, msg_cpuid_leaf7_failed
+    call    print_loop
+    ret
 
-.other:
+cpu_xleaf2to4_detection:
+    cmp     [boot_info.cpu_max_x_leaf], 0x80000004
+    jb      .done
+    mov     eax, 0x80000002         ; copy eax, ebx, ecx, edx
+    cpuid
+    mov     [boot_info.brand_string], eax
+    mov     [boot_info.brand_string + 4], ebx
+    mov     [boot_info.brand_string + 8], ecx
+    mov     [boot_info.brand_string + 12], edx
+    mov     eax, 0x80000003
+    mov     [boot_info.brand_string + 16], eax
+    mov     [boot_info.brand_string + 20], ebx
+    mov     [boot_info.brand_string + 24], ecx
+    mov     [boot_info.brand_string + 28], edx
+    mov     eax, 0x80000004
+    mov     [boot_info.brand_string + 32], eax
+    mov     [boot_info.brand_string + 36], ebx
+    mov     [boot_info.brand_string + 40], ecx
+    mov     [boot_info.brand_string + 44], edx
+.done:
+    mov     di, msg_cpuid_xleaf2to4_success
+    call    print_loop
+    ret
+.failed:
+    mov     di, msg_cpuid_xleaf2to4_failed
+    call    print_loop
+    ret
 
-.hypervisor:
 
 ; ---------- functions ----------
 ; general purpose function | CRITICAL: USE ONLY IN REAL MODE! 
@@ -495,6 +565,14 @@ msg_bios_a20_cont   db      "Attempt other known method for A20 initiation...", 
 msg_kb_ctrl_failed  db      "Keyboard controller A20 initiation failed. Attmepting other known method...", 13, 10, 0
 msg_ff_failed       db      "System Control Port A A20 initiation failed!", 13, 10
 
+msg_cpuid_unknown_vendor    db      "CPUID: Attempt to detect CPU architecture return unknown vendor!", 13, 10, 0
+msg_cpuid_leaf1_failed      db      "CPUID: Leaf 1 unavailable: Unable to detect CPU Signature and Base Feature Flags!", 13, 10, 0
+msg_cpuid_leaf1_success     db      "CPUID: CPU Signature and Base Feature Flags detection success!", 13, 10, 0
+msg_cpuid_leaf7_failed      db      "CPUID: Leaf 7 unavailable: Unable to detect extended feature flags!", 13, 10, 0
+msg_cpuid_leaf7_sucess      db      "CPUID: Extended Feature Flags detection success!", 13, 10, 0
+msg_cpuid_xleaf2to4_failed  db      "CPUID: Failed to fetch CPU Brand Label", 13, 10, 0
+msg_cpuid_xleaf2to4_success db      "CPUID: Successfully fetch CPU Brand Label", 13, 10, 0      
+
 hex_map             db      "0123456789ABCDEF"
 
 global  bios_cursor
@@ -542,10 +620,20 @@ align 8
 boot_info:
 .boot_drive         db      0
 .entry_count        dd      0
+
 .reserved   times 3 db      0   ; for alignment
-.cpu_ecx            dd      0   ; cpuid stuff
-.cpu_edx            dd      0
-.cpu_max_leaf       db      0
+
+;cpuid subsection
+.cpu_features1_ecx  dd      0
+.cpu_features1_edx  dd      0
+.cpu_features7_ebx  dd      0
+.cpu_features7_ecx  dd      0
+.cpu_features7_edx  dd      0
+.cpu_max_leaf       dd      0
+.cpu_max_x_leaf     dd      0
+.vendor_category    db      0
+.vendor_name    times 3     dd      0
+.brand_string   times 48    db      0
 
 align 8
 .memory_map:
