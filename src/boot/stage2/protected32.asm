@@ -39,8 +39,12 @@ protected32_entry:
     mov     al, 24
     call    move_cursor         ; move to row 24, col 0
 
-    xor     ah, ah              ; defualt color
-    mov     esi, msg_test_wrap
+ ;   xor     ah, ah              ; defualt color
+ ;   mov     esi, msg_test_wrap
+ ;   call    print_string32
+
+    xor     ah, ah
+    mov     esi, msg_esc_seq_test
     call    print_string32
         
     jmp     stop

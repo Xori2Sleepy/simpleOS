@@ -219,7 +219,7 @@ print_char32:
     test    esi, esi
     je      .relative           ; print relative to cursor position
 
-.absolute:
+    .absolute:
     ; natually fall here, print to col/row 
     push    eax
     mov     ax, dx
@@ -230,7 +230,7 @@ print_char32:
     pop     eax
     jmp     .exit
 
-.relative:
+    .relative:
     push    eax
     xor     eax, eax
     mov     al, [current_row]
@@ -242,7 +242,7 @@ print_char32:
     pop     eax
     jmp     .exit
 
-.exit:
+    .exit:
     mov     word [edi], ax
     pop     dx
     pop     ax
@@ -254,55 +254,124 @@ print_string32:
     ; clobbered regs: NA
     pushf
     cld
-    xor     cx, cx      ; note buffer counter
     mov     dh, ah      ; use provide color, overwrite if needed
     test    ah, ah
     jnz     .loop
     ; if eax = 0, use default
     mov     ah, (BG_BLACK | FG_WHITE) 
     mov     dh, ah
-.loop:
-    lodsb                       ; Load next word from ESI into AL
+
+    .loop:
+    lodsb                       ; Load next word from [esi] into AL
     cmp     al, 0
     je      .done
+    
+    cmp     al, 92
+    je      .escape_sequence
 
     cmp     al, 10
     je      .line_feed
 
     cmp     al, 13
-    je      .carriage_return    ; some type writer bullshit, aint born in this period
-                                ; my mom said she did a typewriter competition before tho
+    je      .carriage_return    ; some type writer stuff, aint born in this period
     
-    mov     ah, dh
-    push    dx                  ; we dont have to do this cause i write my function to be respondsible for perserving
+    push    dx                  ; we tecnically dont have to do this cause i write my function to be respondsible for perserving
     push    esi                 ; this mistake cost me 3 hours of my life
+
+    mov     ah, dh              ; moving color into ah
     xor     esi, esi            ; I actually should make a documentation...
     call    print_char32        ; if even the author is confused by his own function
-    pop     esi                 ; i cant begin to imagine the nightmare other potential contributor will have
+                                ; i cant begin to imagine the nightmare other potential contributor will have
+
 
     mov     eax, -1             ; it basically just 0xFFFFFFFF
     xor     al, al              ; this is preparing confusing argument for move_cursor...
     mov     ah, 1
     call    move_cursor
+
+    pop     esi
     pop     dx
     jmp     .loop
 
-.line_feed:
+    .escape_sequence:
+    mov     cl, byte [esi]      ; read character currently pointed by pointer | lodsb inc after mov
+
+    cmp     cl, 92
+    je      .backslash_handling
+    cmp     cl, 'a'
+    je      .bg_color
+    cmp     cl, 'b'
+    je      .fg_color
+    jmp     .loop               ; auto skip
+
+    .backslash_handling:
+    ; print backslash
+    push    dx
+    push    esi
+    mov     al, 92
+    mov     ah, dh
+    xor     esi, esi
+    call    print_char32
+    mov     eax, -1
+    xor     al, al
+    mov     ah, 1
+    call    move_cursor
+    pop     esi
+    pop     dx
+
+    add     esi, 1             ; incriment our char pointer to skip "\\"
+    jmp     .loop
+
+    .bg_color:
+    mov     cl, byte [esi+1]
+    mov     al, cl
+    call    convert_ascii2int   ; int in ax
+    shl     ax, 4               ; shift 4 bit (mul 16) 
+    and     dh, 0x0F            ; clear upper bit of ah, atp only upper 4 bits exist in cl
+    or      dh, al              ; merge them
+    add     esi, 2
+    jmp     .loop
+    
+    .fg_color:
+    mov     cl, byte [esi+1]
+    mov     al, cl
+    call    convert_ascii2int
+    and     dh, 0xF0           ; clear lower bits
+    or      dh, al             ; merge higher ah and lower cl 
+    add     esi, 2
+    jmp     .loop
+
+    .line_feed:
     mov     eax, -1
     mov     al, 1
     xor     ah, ah
     call    move_cursor
     jmp     .loop
     
-.carriage_return:
+    .carriage_return:
     xor     eax, eax            ; absolute mode
     mov     al, [current_row] 
     mov     ah, 0
     call    move_cursor         ; current row, col = 0
     jmp     .loop
 
-.done: 
+    .done: 
     popf
+    ret
+
+convert_ascii2int:
+    ; purpose: convert ascii (0 to 9 & a to z & A to Z) to raw integer based on hex
+    ; input: al <- ASCII
+    ; output: al
+    ; clobered: flags, al
+    cmp     al, '9'
+    jbe     .is_digit           ; # come before letter, if it doesnt jmp it lettert
+    
+    or      al, 0x20            ; convert capital to lower
+    sub     al, 0x57            
+    ret
+.is_digit:
+    sub     al, 0x30
     ret
 
 stop:
@@ -310,10 +379,12 @@ stop:
 .loop:
     jmp     .loop
 
-msg_welcome32       db      "Ruccessfully enter 32bits protected mode.", 13, 10, 0
+msg_welcome32       db      "Successfully enter 32bits protected mode.", 13, 10, 0
 msg_test_wrap       db      "Testing screen wrapping mechanism right now we need to fill in"
                     db      " alot of stuff blah blah balh blah blah skibidi 67 i am brain rotted"
                     db      " grr holy cow boy what the fuck lingan guu lingan guu blah 91238123098", 13, 10, 0
+
+msg_esc_seq_test    db      "\heyre\\sponsive?\\holycow\a4a\a6\b2haha", 13, 10, 0
 
 VGA_buffer_base     equ     0xb8000
 row_limit           equ     24

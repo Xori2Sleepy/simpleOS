@@ -412,9 +412,8 @@ cpu_leaf7_detection:
     ret
 
 cpu_xleaf2to4_detection:
-    cmp     [boot_info.cpu_max_x_leaf], 0x80000000
-    jb      .failed         ; if no extended feature we failed, it, this is to prevent oveflow/underflow error
-    cmp     [boot_info.cpu_max_x_leaf], 0x80000004
+    mov     eax, [boot_info.cpu_max_x_leaf]
+    cmp     eax, 0x80000004
     jb      .failed
 
     mov     eax, 0x80000002         ; copy eax, ebx, ecx, edx
