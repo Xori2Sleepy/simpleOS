@@ -1,76 +1,6 @@
 [bits 16]
 [org 0x7E00]
 
-global  null_descriptor
-global  kernelcode_32bits_descriptor
-global  kernelcode_64bits_descriptor
-global  kerneldata_32bits_descriptor
-
-null_descriptor                     equ      0x00
-kernelcode_32bits_descriptor        equ      0x08
-kernelcode_64bits_descriptor        equ      0x10
-kerneldata_32bits_descriptor        equ      0x18
-
-E820_signature          equ     0x534D4150
-E820_entry_size         equ     24
-
-CPUID_VENDOR_BUFFER:
-            times 3     dd      0   ; 12 byte buffer
-CPUID_VENDOR_COUNT      equ     29
-CPUID_VENDOR_TABLE_SIZE equ     CPUID_VENDOR_COUNT * 12
-CPUID_AMD_CATEGORY      equ     1
-CPUID_INTEL_CATEGORY    equ     2
-CPUID_INTEL_COMPATIBLE  equ     3
-CPUID_OTHER_CATEGORY    equ     4
-CPUID_HYPERVISOR        equ     5
-
-CPUID_VENDOR_TABLE:
-    ; AMD
-    CPUID_VENDOR_AMD        db      "AuthenticAMD"
-    CPUID_VENDOR_AMD_OLD    db      "AMDisbetter!"      ; I agree bro
-    CPUID_VENDOR_HYGON      db      "HygonGenuine"
-
-    ; Intel
-    CPUID_VENDOR_INTEL      db      "GenuineIntel"      ; step up your game, your name suck
-
-    ; Intel Compatable
-    CPUID_VENDOR_VIA        db      "VIA VIA VIA "      ; worst one yet
-    CPUID_VENDOR_TRANSMETA  db      "GenuineTMx86"
-    CPUID_VENDOR_TRANSMETA_OLD      db      "TransmetaCPU"
-    CPUID_VENDOR_CYRIX      db      "CyrixInstead"
-    CPUID_VENDOR_CENTAUR    db      "CentaurHauls"
-    CPUID_VENDOR_NEXGEN     db      "NexGenDriven"
-    CPUID_VENDOR_UMC        db      "UMC UMC UMC "
-    CPUID_VENDOR_SIS        db      "SIS SIS SIS "
-    CPUID_VENDOR_NSC        db      "Geode by NSC"      ; i feel like i heard about Geode from somewhere...
-    CPUID_VENDOR_RISE       db      "RiseRiseRise"
-    CPUID_VENDOR_ZHAOXIN    db      "  Shanghai  "
-
-    ; Embeded / Other
-    CPUID_VENDOR_VORTEX     db      "Vortex86 SoC"
-    CPUID_VENDOR_ELBRUS     db      "E2L MACHINE "
-    CPUID_VENDOR_A0486      db      "MiSTer A0486"
-    CPUID_VENDOR_A0486_OLD  db      "GenuineA0486"
-
-    ; Hypervisors CPUID
-    CPUID_VENDOR_QEMU       db      "TCGTCGTCGTCG"
-    CPUID_VENDOR_KVM        db      " KVMKVMKVM "
-    CPUID_VENDOR_VMWARE     db      "VMwareVMware"
-    CPUID_VENDOR_VIRTUALBOX db      "VBoxVBoxVBox"
-    CPUID_VENDOR_XEN        db      "XenVMMXenVMM"
-    CPUID_VENDOR_HYPERV     db      "Microsoft HV"
-    CPUID_VENDOR_PARALLELS  db      " prl hyperv "
-    CPUID_VENDOR_PARALLELS_ALT      db      " lrpepyh vr "  ; we need alt because sometime endianess mismatch
-    CPUID_VENDOR_BHYVE      db      "bhyve bhyve "
-    CPUID_VENDOR_QNX        db      " QNXQVMBSQG "
-
-CPUID_VENDOR_CATEGORY:
-    times 3     db      CPU_AMD_CATEGORY
-    times 1     db      CPU_INTEL_CATEGORY
-    times 11    db      CPU_INTEL_COMPATIBLE
-    times 4     db      CPU_OTHER_CATEGORY
-    times 10    db      CPU_HYPERVISOR
-
 ; input: base, limit, access bytes, flags
 %macro gdt_entries 4
     dw      %2 & 0xFFFF         ; limit is 20 bits we only need first 16 here
@@ -101,8 +31,18 @@ stage2_entry:
 
     mov     si, msg
     call    print_loop
+
+
+    call    get_cpuid
+
+    mov     si, msg_attempt_a20
+    call    print_loop
     call    enable_a20
+
+    mov     si, msg_attempt_e820
+    call    print_loop
     call    detect_memory_e820
+
     call    get_bios_cursor     ; need before jumping, make sure no write to buffer after this!
 
     ; coming for 32 mode. finally, I have escape the shackle of 16 bits programing!
@@ -357,12 +297,19 @@ get_cpuid:
     jz      .unavailable
     jnz     .avaliable
 
+.unavailable:
+    mov     di, msg_cpuid_unavailable
+    call    print_loop
+    call    halt
+    ret
+
 .avaliable:
     call    cpu_leaf0_detection
     call    max_extended_detection
     call    cpu_leaf1_detection
     call    cpu_leaf7_detection
     call    cpu_xleaf2to4_detection        ; xleaf for extended leaf (0x80000000+)
+    ret
     
 cpu_leaf0_detection:
     xor     eax, eax
@@ -387,9 +334,9 @@ cpu_leaf0_detection:
     ; if equal fall here
 .equal:
 
-    mov     [boot_info.vendor], ebx
-    mov     [boot_info.vendor + 4], edx
-    mov     [boot_info.vendor + 8], ecx
+    mov     [boot_info.vendor_name], ebx
+    mov     [boot_info.vendor_name + 4], edx
+    mov     [boot_info.vendor_name + 8], ecx
 
     mov     ax, di
     xor     dx, dx
@@ -404,11 +351,11 @@ cpu_leaf0_detection:
 
 .cont:
     add     edi, 12     ; add 12 byte to base pointer, next entries
-    cmp     edi, CPU_VENDOR_TALE_SIZE
+    cmp     edi, CPUID_VENDOR_TABLE_SIZE
     jae     .unknown_vendor
     jmp     .loop
 
-.unknown_vendor
+.unknown_vendor:
     ; we store 0 if it just unknown
     mov     [boot_info.vendor_name], 0
     mov     [boot_info.vendor_name + 4], 0
@@ -431,13 +378,13 @@ cpu_leaf1_detection:
     cpuid
     mov     [boot_info.cpu_signature], eax
     mov     [boot_info.cpu_features1_ecx], ecx
-    mov     [boot_info.cpu_features1_cdx], edx
+    mov     [boot_info.cpu_features1_edx], edx
 .done:
-    mov     di, msg_cpuid_leaf1_success
+    mov     si, msg_cpuid_leaf1_success
     call    print_loop
     ret
 .failed:
-    mov     di, msg_cpuid_leaf1_failed
+    mov     si, msg_cpuid_leaf1_failed
     call    print_loop
     ret
 
@@ -451,17 +398,20 @@ cpu_leaf7_detection:
     mov     [boot_info.cpu_features7_ecx], ecx
     mov     [boot_info.cpu_features7_edx], edx
 .done:
-    mov     di, msg_cpuid_leaf7_success
+    mov     si, msg_cpuid_leaf7_success
     call    print_loop
     ret
 .failed:
-    mov     di, msg_cpuid_leaf7_failed
+    mov     si, msg_cpuid_leaf7_failed
     call    print_loop
     ret
 
 cpu_xleaf2to4_detection:
+    cmp     [boot_info.cpu_max_x_leaf], 0x80000000
+    jb      .failed         ; if no extended feature we failed, it, this is to prevent oveflow/underflow error
     cmp     [boot_info.cpu_max_x_leaf], 0x80000004
-    jb      .done
+    jb      .failed
+
     mov     eax, 0x80000002         ; copy eax, ebx, ecx, edx
     cpuid
     mov     [boot_info.brand_string], eax
@@ -479,11 +429,11 @@ cpu_xleaf2to4_detection:
     mov     [boot_info.brand_string + 40], ecx
     mov     [boot_info.brand_string + 44], edx
 .done:
-    mov     di, msg_cpuid_xleaf2to4_success
+    mov     si, msg_cpuid_xleaf2to4_success
     call    print_loop
     ret
 .failed:
-    mov     di, msg_cpuid_xleaf2to4_failed
+    mov     si, msg_cpuid_xleaf2to4_failed
     call    print_loop
     ret
 
@@ -552,10 +502,10 @@ print_error:
 
 ; -------------------- variable space --------------------
 align 16            ; does it even matter?
-msg                 db      "Second Stage bootloader succesfully loaded! Attempting to enable A20...", 13, 10, 0
+msg                 db      "Second Stage bootloader succesfully loaded!", 13, 10, 0
 msg_e820_success    db      "E820 memory mapping success! Attemp to far jump!", 13, 10, 0
 msg_e820_failed     db      "E820 memory mapping failed; System can not be load safely: Halting CPU..."
-msg_a20_success     db      "A20 successfully initialize! Attempt to build memory map...", 13, 10, 0
+msg_a20_success     db      "A20 successfully initialize!", 13, 10, 0
 msg_a20_failed      db      "CRITICAL: Attempted all reliable method. If you see this message, the only way to continue "
                     db      "is to dig up the bootloader code and manually uncomment other method. Good Luck!", 13, 10, 0
                     db      "CRITICAL: A20 can not be enable; system can not be safely load: Halting CPU...", 13, 10, 0
@@ -565,11 +515,15 @@ msg_bios_a20_cont   db      "Attempt other known method for A20 initiation...", 
 msg_kb_ctrl_failed  db      "Keyboard controller A20 initiation failed. Attmepting other known method...", 13, 10, 0
 msg_ff_failed       db      "System Control Port A A20 initiation failed!", 13, 10
 
+msg_attempt_a20     db      "Attempting to enable A20: ", 0
+msg_attempt_e820    db      "Attempt to build memory map: ", 0
+
+msg_cpuid_unavailable       db      "CPUID: CPUID feature is unavailable, can not obtain nessary information!", 13, 10, 0
 msg_cpuid_unknown_vendor    db      "CPUID: Attempt to detect CPU architecture return unknown vendor!", 13, 10, 0
 msg_cpuid_leaf1_failed      db      "CPUID: Leaf 1 unavailable: Unable to detect CPU Signature and Base Feature Flags!", 13, 10, 0
 msg_cpuid_leaf1_success     db      "CPUID: CPU Signature and Base Feature Flags detection success!", 13, 10, 0
 msg_cpuid_leaf7_failed      db      "CPUID: Leaf 7 unavailable: Unable to detect extended feature flags!", 13, 10, 0
-msg_cpuid_leaf7_sucess      db      "CPUID: Extended Feature Flags detection success!", 13, 10, 0
+msg_cpuid_leaf7_success     db      "CPUID: Extended Feature Flags detection success!", 13, 10, 0
 msg_cpuid_xleaf2to4_failed  db      "CPUID: Failed to fetch CPU Brand Label", 13, 10, 0
 msg_cpuid_xleaf2to4_success db      "CPUID: Successfully fetch CPU Brand Label", 13, 10, 0      
 
@@ -616,6 +570,76 @@ gdt_descriptor:
     dd      gdt_start
 ; --------------------------------------------------------
 
+global  null_descriptor
+global  kernelcode_32bits_descriptor
+global  kernelcode_64bits_descriptor
+global  kerneldata_32bits_descriptor
+
+null_descriptor                     equ      0x00
+kernelcode_32bits_descriptor        equ      0x08
+kernelcode_64bits_descriptor        equ      0x10
+kerneldata_32bits_descriptor        equ      0x18
+
+E820_signature          equ     0x534D4150
+E820_entry_size         equ     24
+
+CPUID_VENDOR_BUFFER:
+            times 3     dd      0   ; 12 byte buffer
+CPUID_VENDOR_COUNT      equ     29
+CPUID_VENDOR_TABLE_SIZE equ     CPUID_VENDOR_COUNT * 12
+CPUID_AMD_CATEGORY      equ     1
+CPUID_INTEL_CATEGORY    equ     2
+CPUID_INTEL_COMPATIBLE  equ     3
+CPUID_OTHER_CATEGORY    equ     4
+CPUID_HYPERVISOR        equ     5
+
+CPUID_VENDOR_TABLE:
+    ; AMD
+    CPUID_VENDOR_AMD        db      "AuthenticAMD"
+    CPUID_VENDOR_AMD_OLD    db      "AMDisbetter!"      ; I agree bro
+    CPUID_VENDOR_HYGON      db      "HygonGenuine"
+
+    ; Intel
+    CPUID_VENDOR_INTEL      db      "GenuineIntel"      ; step up your game, your name suck
+
+    ; Intel Compatable
+    CPUID_VENDOR_VIA        db      "VIA VIA VIA "      ; worst one yet
+    CPUID_VENDOR_TRANSMETA  db      "GenuineTMx86"
+    CPUID_VENDOR_TRANSMETA_OLD      db      "TransmetaCPU"
+    CPUID_VENDOR_CYRIX      db      "CyrixInstead"
+    CPUID_VENDOR_CENTAUR    db      "CentaurHauls"
+    CPUID_VENDOR_NEXGEN     db      "NexGenDriven"
+    CPUID_VENDOR_UMC        db      "UMC UMC UMC "
+    CPUID_VENDOR_SIS        db      "SIS SIS SIS "
+    CPUID_VENDOR_NSC        db      "Geode by NSC"      ; i feel like i heard about Geode from somewhere...
+    CPUID_VENDOR_RISE       db      "RiseRiseRise"
+    CPUID_VENDOR_ZHAOXIN    db      "  Shanghai  "
+
+    ; Embeded / Other
+    CPUID_VENDOR_VORTEX     db      "Vortex86 SoC"
+    CPUID_VENDOR_ELBRUS     db      "E2L MACHINE "
+    CPUID_VENDOR_A0486      db      "MiSTer A0486"
+    CPUID_VENDOR_A0486_OLD  db      "GenuineA0486"
+
+    ; Hypervisors CPUID
+    CPUID_VENDOR_QEMU       db      "TCGTCGTCGTCG"
+    CPUID_VENDOR_KVM        db      " KVMKVMKVM "
+    CPUID_VENDOR_VMWARE     db      "VMwareVMware"
+    CPUID_VENDOR_VIRTUALBOX db      "VBoxVBoxVBox"
+    CPUID_VENDOR_XEN        db      "XenVMMXenVMM"
+    CPUID_VENDOR_HYPERV     db      "Microsoft HV"
+    CPUID_VENDOR_PARALLELS  db      " prl hyperv "
+    CPUID_VENDOR_PARALLELS_ALT      db      " lrpepyh vr "  ; we need alt because sometime endianess mismatch
+    CPUID_VENDOR_BHYVE      db      "bhyve bhyve "
+    CPUID_VENDOR_QNX        db      " QNXQVMBSQG "
+
+CPUID_VENDOR_CATEGORY:
+    times 3     db      CPUID_AMD_CATEGORY
+    times 1     db      CPUID_INTEL_CATEGORY
+    times 11    db      CPUID_INTEL_COMPATIBLE
+    times 4     db      CPUID_OTHER_CATEGORY
+    times 10    db      CPUID_HYPERVISOR
+
 align 8
 boot_info:
 .boot_drive         db      0
@@ -631,6 +655,7 @@ boot_info:
 .cpu_features7_edx  dd      0
 .cpu_max_leaf       dd      0
 .cpu_max_x_leaf     dd      0
+.cpu_signature      dd      0
 .vendor_category    db      0
 .vendor_name    times 3     dd      0
 .brand_string   times 48    db      0
