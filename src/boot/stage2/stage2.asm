@@ -69,9 +69,7 @@ stage2_entry:
 ;                A20 functions start here!
 ; ------------------------------------------------------------ 
 enable_a20:
-    ; for some reason all the website out there make it look like this is some scary as hell process,
-    ; i am kinda scare now ...
-
+    ; enabling the usage of ram space beyond 1mb
     call    check_a20           ; alway check before anything
     jc      .a20_done
 
@@ -412,9 +410,8 @@ cpu_leaf7_detection:
     ret
 
 cpu_xleaf2to4_detection:
-    cmp     [boot_info.cpu_max_x_leaf], 0x80000000
-    jb      .failed         ; if no extended feature we failed, it, this is to prevent oveflow/underflow error
-    cmp     [boot_info.cpu_max_x_leaf], 0x80000004
+    mov     eax, [boot_info.cpu_max_x_leaf]
+    cmp     eax, 0x80000004
     jb      .failed
 
     mov     eax, 0x80000002         ; copy eax, ebx, ecx, edx
@@ -658,7 +655,7 @@ msg_cpuid_xleaf2to4_success db      "   CPUID: Successfully fetch CPU Brand Labe
 ; -------------------- random constant space --------------------
 
 
-global  bios_cursor
+global  bios_cursor                 ; linear bios cursor addressing
 global  null_descriptor
 global  kernelcode_32bits_descriptor
 global  kernelcode_64bits_descriptor
