@@ -1,4 +1,10 @@
 [bits 32]
+; THIS IS GOING TO BE THE LEAST CLEAN REGISTER USAGE YOU WILL EVER SEEN
+; it a hobby OS and functions is is not uses by other process so... it doesnt matter that much
+; the problem is for my future self to fix ;)
+
+; also I just realize after i done wiht stuff why the fuck am i writing this shit in 32 bits mode
+; i have to rewrite this code anyway when I am in 64 bits no???? FUCK
 
 ; ---------- VGA functions ----------  
 ; 2000 slot of 80 col and 25 rows, each slot is 2 bytes
@@ -92,7 +98,6 @@ move_cursor:
     jz      .skip
     add     al, byte [current_row]      ; eh, dumb logic but it work, sorry man ;-;
     add     ah, byte [current_col]
-    xor     edi, edi
     call    grid_normalization 
 
 .skip:
@@ -145,78 +150,111 @@ enable_cursor:
     out     dx, al
     ret
 
+enable_escape_sequence:
+    mov     al, [VGA_flags]     ; setting mode
+    and     al, 11111011b       ; wiping esc seq bit
+    or      al, 00000100b       ; merge bits
+    mov     [VGA_flags], al
+
+disable_escape_sequence:
+    mov     al, [VGA_flags]     ; setting mode
+    and     al, 11111011b       ; wiping esc seq bit
+    mov     [VGA_flags], al
+
 grid_normalization:
     ; I KNOW I KNOW THIS CODE IS HORRIBLE BUT I DONT GOT NO TIME TO WORK ON THIS!
     ; purpose: normalized grid input (row and col) to make it actually make sense. (basically wrapping logic)
-    ; input: al = row, ah = col | edi = mode
+    ; input: al = row, ah = col
     ; output: al = row, ah = col ; but normalized! (why am i writing a comment inside a comment???)
-    ; note: DEFINITELY NEED TO IMPROVE THIS, THIS IS SHIT CODE BRO
-    ;     : add more mode. broken too
-    ;     : edi mode select
+    ;     : edi mode select - 00 (wrap top) 01 (wrap top clear) 10 (scroll wrap) 11 (scroll wrap buffer history)
+    ; every 80 colums become one row
+    mov     edi, [VGA_flags]
+    and     edi, 00000011b  ; only the first 2 bit respond to normalization mode
+
+    .normalize_col:
+    cmp     ah, col_limit + 1
+    jb      .normalize_row
+    sub     ah, col_limit + 1   ; if ah>limit, fall here
+    inc     al
+    jmp     .normalize_col
+
+    .normalize_row:
+    ; row wrapped?
+    cmp     al, row_limit + 1   ; only come here if we confirm that col is within limit
+    jb      .done
+
     cmp     edi, 10b
-    jae     scroll_wrap
+    jae     .scroll_wrap
 
-.top_wrap:
-    cmp     al, row_limit
-    jb     .passed
-    cmp     ah, col_limit
-    jbe    .passed
-
-.normalize_row:
+    .wrap_top:
     cmp     edi, 01b
     jne     .skip_clear
+
     push    ax
-    mov     ah, (BG_BLACK)
+    mov     ah, BG_BLACK
     call    clear_screen
     pop     ax
-.skip_clear:
 
-    sub     al, row_limit
-    sub     ah, (col_limit + 1)
-    jmp     .top_wrap
+    .skip_clear:
+    sub     al, row_limit + 1
+    jmp     .normalize_row
 
-.normalize_col:
-    sub     ah, col_limit
-    add     al, 1
-    jmp     .top_wrap
+    .scroll_wrap:
+    cmp     al, row_limit + 1
+    jb      .done
 
-.passed:
-    cmp     al, col_limit
-    jae     .normalize_col
-    ret
-
-scroll_wrap:
-    push    ax
-    xor     ax, ax
-
-    cmp     edi, 11b            ; not implemented currently
-    jne     .skip_save
-    mov     ah, 1
-.skip_save:
     mov     al, 1
+    xor     ah, ah              ; history function is not implement! it take too much memory
     call    shift_VGA_buffer
-    
+    xor     eax, eax            ; absolute
+    mov     al, 24
+    mov     ah, 0
+
+    jmp     .scroll_wrap
+    .done:
+    ret
 
 shift_VGA_buffer:
     ; purpose: shift stuff from vga buffer up by one
-    ; input: al <- amount to shift | ah <- save or not
+    ; input: al <- amount to shift | ah <- save or not (this is not implement, 2 much buffer need)
+    push    esi
+    push    edi
+    push    ecx
+    push    eax
+
+    cld
+    mov     esi, (VGA_buffer_base + 160)    ; second row
+    mov     edi, (VGA_buffer_base)          ; first row
+    mov     ecx, 24 * 80                    ; 1920 words
+    rep     movsw
+
+    ; clear last row
+    mov     edi, (VGA_buffer_base + (24 * 160))
+    mov     ax, BG_BLACK | FG_WHITE
+    shl     eax, 8
+    mov     al, ' '
+    mov     ecx, 80
+    rep     stosw
+    
+    pop     eax
+    pop     ecx
+    pop     edi
+    pop     esi
     ret
-    
-    
 
 ; ---------- Print functions ----------  
 print_char32:
     ; purpose: print a single character, in absolute mode a row/col is needed 
     ;          but relative will print to cursor
-    ; input: esi <- mode, ax <- char, if (abs mode) dl = row, dh = col, 
+    ; input: edi <- mode, ax <- char, if (abs mode)  = row, dh = col, 
     ; output: NA
     ; clobbered: NA
     ; note: ((BG | FG ) << 8 ) | char   should be your format for ax
     ;     : for simplicity this thing only write! no incrimental features!
-    push    esi
+    push    edi
     push    ax
     push    dx
-    test    esi, esi
+    test    edi, edi
     je      .relative           ; print relative to cursor position
 
     .absolute:
@@ -250,10 +288,17 @@ print_char32:
     ret
     
 print_string32:
-    ; input regs: esi <- pointer, ah <- 0 (deafult) else uses ah as color
-    ; clobbered regs: NA
+    ; input regs: edi <- pointer, ah <- 0 (deafult) else uses ah as color
+    ;           : also have string parsing function, \ trigger escape sequence
+    ;           : \\ will print '\', while \a# where # is a number from 0-F will change background color
+    ;           : for foreground use \b#. More escape sequence might be added in the future
+    ; clobbered regs: edi, ah, 
     pushf
     cld
+    mov     esi, edi    ; esi is used by lodsb
+    mov     edi, [VGA_flags]
+    shr     edi, 2      ; now 3rd bit is the LSB
+    and     edi, 1      ; isolate third
     mov     dh, ah      ; use provide color, overwrite if needed
     test    ah, ah
     jnz     .loop
@@ -265,10 +310,13 @@ print_string32:
     lodsb                       ; Load next word from [esi] into AL
     cmp     al, 0
     je      .done
-    
+       
+    cmp     edi, 0
+    je      .skip_esc
     cmp     al, 92
     je      .escape_sequence
 
+    .skip_esc:
     cmp     al, 10
     je      .line_feed
 
@@ -277,9 +325,10 @@ print_string32:
     
     push    dx                  ; we tecnically dont have to do this cause i write my function to be respondsible for perserving
     push    esi                 ; this mistake cost me 3 hours of my life
+    push    edi
 
     mov     ah, dh              ; moving color into ah
-    xor     esi, esi            ; I actually should make a documentation...
+    xor     edi, edi            ; I actually should make a documentation...
     call    print_char32        ; if even the author is confused by his own function
                                 ; i cant begin to imagine the nightmare other potential contributor will have
 
@@ -289,6 +338,7 @@ print_string32:
     mov     ah, 1
     call    move_cursor
 
+    pop     edi
     pop     esi
     pop     dx
     jmp     .loop
@@ -310,7 +360,7 @@ print_string32:
     push    esi
     mov     al, 92
     mov     ah, dh
-    xor     esi, esi
+    xor     edi, edi
     call    print_char32
     mov     eax, -1
     xor     al, al
@@ -319,7 +369,7 @@ print_string32:
     pop     esi
     pop     dx
 
-    add     esi, 1             ; incriment our char pointer to skip "\\"
+    add     esi, 1              ; incriment our char pointer to skip "\\"
     jmp     .loop
 
     .bg_color:
@@ -379,20 +429,14 @@ stop:
 .loop:
     jmp     .loop
 
-msg_welcome32       db      "Successfully enter 32bits protected mode.", 13, 10, 0
-msg_test_wrap       db      "Testing screen wrapping mechanism right now we need to fill in"
-                    db      " alot of stuff blah blah balh blah blah skibidi 67 i am brain rotted"
-                    db      " grr holy cow boy what the fuck lingan guu lingan guu blah 91238123098", 13, 10, 0
-
-msg_esc_seq_test    db      "\heyre\\sponsive?\\holycow\a4a\a6\b2haha", 13, 10, 0
 
 VGA_buffer_base     equ     0xb8000
 row_limit           equ     24
 col_limit           equ     79
+
 current_row         db      0x00000
 current_col         db      0x00000
-
-note_buffer         dd      0
+VGA_flags           db      0
 
 ; Foreground Colors
 FG_BLACK            equ     0x00
