@@ -211,9 +211,8 @@ check_a20:
 ; ------------------ E820 functions ------------------
 detect_memory_e820:
     ; i can already tell this is going to be the most confusing function conceptually
-    xor     ebx, ebx            ; token for int, this help bios keep track of bs it spit out
+    xor     ebx, ebx                    ; token/incrimentor for interupt, this help bios keep track of bs it spit out
     mov     dword [boot_info.entry_count], 0
-
     mov     di, boot_info.memory_map    ; just moving pointer
 
 .next_entry:
@@ -224,10 +223,10 @@ detect_memory_e820:
     mov     dword [es:di+20], 1 ; needed by some bios? legacy reason
 
     int     0x15                ; write to our pointer
-    jc      .failed             ; error/no support
+    jc      .e820_failed        ; error/no support
 
     cmp     eax, E820_signature ; see if it give gabbage or nah
-    jne     .failed             ; if sig is bs, it garbage we are done
+    jne     .e820_failed        ; if sig is bs, it garbage we are done
 
     mov     eax, [es:di+8]      ; point to length attribute (length is 8 byte)
     or      eax, [es:di+12]     ; length + 4. 
@@ -241,14 +240,77 @@ detect_memory_e820:
     jnz     .next_entry
 
     cmp     dword [boot_info.entry_count], 0
-    jz      .failed             ; if we got nothing in map it fail
+    jz      .e820_failed        ; if we got nothing in map it fail
     
     mov     si, msg_e820_success
     call    print_loop
     ret
 
-.failed:
+.e820_failed:
     mov     si, msg_e820_failed
+    call    print_loop
+
+    ; try fall back method
+    mov     ax, 0xE801
+    int     0x15
+    jc      .e801_failed
+
+    test    ax, ax              ; sometime e801 return stuff in cx/dx instead of ax/bx
+    jnz     .use_ax
+    mov     ax, cx
+    mov     bx, dx
+.use_ax:
+    mov     dword [boot_info.entry_count], 0
+    mov     di, boot_info.memory_map
+
+    ; entry 1: 1mb to 16mb range (ax contain kb)
+    test    ax, ax
+    jz      .check_above_16mb   ; skip if no memory is reported in this range
+
+    ; base address is 1mb (0x00100000)
+    mov     dword [es:di + 0], 0x00100000   ; base low
+    mov     dword [es:di + 4], 0x00000000   ; base high
+    
+    movzx   eax, ax
+    shl     eax, 10             ; multiply by 1024 (2^10)
+    mov     dword [es:di + 8], eax          ; length low
+    mov     dword [es:di + 12], 0x00000000  ; length high 
+
+    ; type 1 (usable ram)
+    mov     dword [es:di + 16], 1           ; type
+    mov     dword [es:di + 20], 1           ; ACPI 3.0 extended attribute
+
+    inc     dword [boot_info.entry_count]   ; we read, so add
+    add     di, E820_entry_size             ; advance map pointer
+
+.check_above_16mb:
+    ; entry 2: above 16mb range (bx contain 64kb box)
+    test    bx, bx
+    jz      .e801_done
+
+    mov     dword [es:di + 0], 0x01000000
+    mov     dword [es:di + 4], 0x00000000
+
+    ; convert bx to bytes
+    movzx   ebx, bx
+    shl     ebx, 16             ; multiply by 65536, (2^16 = 65536)
+    mov     dword [es:di + 8], ebx
+    mov     dword [es:di + 12], 0x00000000
+
+    mov     dword [es:di + 16], 1
+    mov     dword [es:di + 20], 1
+
+    inc     dword [boot_info.entry_count]
+.e801_done:
+    cmp     dword [boot_info.entry_count], 0
+    jz      .e801_failed
+    mov     si, msg_e801_success
+    call    print_loop
+    mov     [boot_info.e801_status], 1      ; tell kernel to be careful!
+    ret
+
+.e801_failed:
+    mov     si, msg_e801_failed
     call    print_loop
     call    halt
 
@@ -524,6 +586,8 @@ boot_info:
     .vendor_name    times 3     dd      0
     .brand_string   times 48    db      0
 
+    .e801_status        db      0
+
     align 8
     .memory_map     times 64 * 24       db      0
 
@@ -623,9 +687,11 @@ msg_cpu_halted      db      "CRITICAL: CPU halted! Please reboot the PC", 13, 10
 msg_far_jump        db      "Preparation complete: Enabling CR0 and attempting a far jump to 32 bits protected mode; Brace for impact and good luck 32 bits code! :)", 13, 10, 0
 msg_gdt             db      "Global Description Table structure defined, loading it to register...", 13, 10, 0
 
-; e820
+; e820 & e801
 msg_e820_success    db      "E820 memory mapping success!", 13, 10, 0
-msg_e820_failed     db      "E820 memory mapping failed; System can not be load safely: Halting CPU..."
+msg_e820_failed     db      "E820 memory mapping failed; Attempting fallback method"
+msg_e801_success    db      "E801 memory mapping success: Note that RAM will be limit to 16 Mb", 13, 10, 0
+msg_e801_failed     db      "E801 memroy mapping failed: Memory cannot be map; Halting CPU...", 13, 10, 0
 
 ; a20
 msg_a20_success     db      "A20 successfully initialize!", 13, 10, 0
