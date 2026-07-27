@@ -39,6 +39,14 @@ stage2_entry:
     call    print_loop
     call    detect_memory_e820
 
+    mov     si, msg_attempt_kernel_load
+    call    print_loop
+    call    kernel_load
+
+    mov     si, msg_attempt_header_read
+    call    print_loop
+    call    kernel_header_read
+
     call    get_bios_cursor     ; need before jumping, make sure no write to buffer after this!
     
     mov     si, msg_gdt
@@ -502,6 +510,122 @@ cpu_xleaf2to4_detection:
     ret
 
 
+disk_check_extensions:
+    ; need dl as input drive
+    mov     ah, 41h
+    mov     bx, 55AAh
+    int     0x13
+    jc      .failed
+    
+    cmp     bx, 55AAh       ; compare signature
+    jne     .failed
+    
+    test    cx, 1           ; bit 0 is the extended disk access
+    jz      .failed
+
+    clc
+    ret
+.failed:
+    stc
+    ret
+
+kernel_load:
+    dec     byte [disk_trial_counter]
+    jz      .kernel_load_failed
+
+    mov     dl, [boot_info.boot_drive]
+    call    disk_check_extensions
+    jc      .chs
+
+.lba:
+    mov     ah, 42h         ; extended read, uses lba
+    mov     dl, [boot_info.boot_drive]
+    mov     si, kernel_dap  ; load only the first sector for header
+    int     13h
+    jnc     .success
+    call    disk_error
+    jmp     kernel_load
+.chs:
+    mov     ah, 02h
+    mov     al, [kernel_dap.sector2read]
+    mov     bx, [kernel_dap.destination]
+    mov     ch, 0
+    mov     cl, [kernel_dap.sector_ad]
+    mov     dh, 0
+    mov     dl, [boot_info.boot_drive]
+    int     13h
+    jnc     .success
+    call    disk_error
+    jmp     kernel_load
+
+.success:
+    mov     si, msg_disk_success
+    call    print_loop
+    mov     si, msg_kernel_load_success
+    call    print_loop
+
+    mov     si, [boot_info.kernel_report]
+    mov     di, 0001b       ; first byte respond to kernel load status
+    or      si, di
+    mov     [boot_info.kernel_report], si
+    ret
+
+.kernel_load_failed:
+    mov     si, msg_kernel_load_failed
+    call    print_loop
+
+    mov     si, [boot_info.kernel_report]
+    mov     di, 11111110b   ; 8 bits
+    and     si, di
+    mov     [boot_info.kernel_report], si ; clear kernel load status bits
+    ret
+
+disk_error:
+    mov     si, msg_disk_failed
+    call    print_error     ; ah already have error
+    xor     ax, ax
+    mov     dl, [boot_info.boot_drive]
+    int     0x13
+    jnc     .rs_success
+    mov     si, msg_rs_failed
+    call    print_loop
+    ret
+.rs_success:
+    mov     si, msg_rs_success
+    call    print_loop
+    ret
+
+kernel_header_read:
+    mov     edi, [kernel_dap.destination]   ; magic is loaded
+    mov     eax, [edi]
+    cmp     eax, kernel_magic
+    jne     .unrecognized_header
+
+    mov     eax, [boot_info.kernel_report]
+    mov     ecx, 00000010b
+    or      eax, ecx
+    mov     [boot_info.kernel_report], eax
+
+    mov     si, msg_recognized_magic
+    call    print_loop
+    
+    mov     edi, kernel_info
+    mov     esi, [kernel_dap.destination]
+    xor     ecx, ecx
+    mov     ecx, [kernel_dap.destination + 6] ; header size
+    cld 
+    rep     movsb
+
+.unrecognized_header:
+    mov     eax, [boot_info.kernel_report]
+    mov     ecx, 11111101b
+    and     eax, ecx
+    mov     [boot_info.kernel_report], eax
+    mov     si, msg_unrecognized_magic
+    call    print_loop
+    ret
+
+
 ; ---------- functions ----------
 ; general purpose function | CRITICAL: USE ONLY IN REAL MODE! 
 ; IT WILL CRASH IF TRY ON PROTECTED MODE!
@@ -538,6 +662,7 @@ print_error:
     ; input regs: pointer to error string in si
     ;           : byte size error (hex) in ah
     ; clobbered regs: NA
+    ; I completly forgot i got this function, actually some how come in handy
     push    ax
     push    bx
     call    print_loop
@@ -564,10 +689,33 @@ print_error:
     pop     ax
     ret
 
+; --------------------  kernel info ------------------------
+kernel_magic            equ     0x51414442
+
+kernel_info:
+    .magic              dd      0
+    .version            dw      0
+    .header_size        dw      0
+    .image_size         dd      0
+    .entry32            dd      0           ; off set from image start
+    .entry64            dd      0
+    .required_cpu       dd      0
+    .flags              dd      0
+
+kernel_dap:                    
+    .dap_size           db      0x10        ; size
+    .reserve            db      0x00        ; reserve for int call
+    .sector2read        dw      0x01        ; sector to read
+    .destination        dw      0x800       ; destination offset, old stack live in that segment should be safe tho, i think
+    .segment            dw      0x0000      ; segment offset
+    .sector_ad          dq      18
+
+disk_trial_counter      db      4
 ; --------------------  boot info ------------------------
 align 8
 boot_info:
     .boot_drive         db      0
+    .kernel_report      db      0           ; 8 bits kernel status flags
     .entry_count        dd      0
 
     .reserved       times 3     db      0   ; for alignment
@@ -703,10 +851,24 @@ msg_bios_a20_cont   db      "Attempt other known method for A20 initiation...", 
 msg_kb_ctrl_failed  db      "Keyboard controller A20 initiation failed. Attmepting other known method...", 13, 10, 0
 msg_ff_failed       db      "System Control Port A A20 initiation failed!", 13, 10
 
+; kernel & disk
+msg_rs_success      db      "   Disk reset success!", 13, 10, 0
+msg_rs_failed       db      "   CRITICAL: Disk reset failed", 13, 10, 0
+msg_disk_success    db      "   Disk read success", 13, 10, 0
+msg_disk_failed     db      "   Disk read error! Error code: ", 0
+msg_kernel_load_success db  "   Kernel header succesfully loaded", 13, 10, 0
+msg_kernel_load_failed  db  "   Kernel header fail to load. Continuing with execution...", 13, 10, 0
+
+; kernel read n stuff
+msg_unrecognized_magic  db  "   Unrecognized magic: kernel header could not be parsed", 13, 10, 0
+msg_recognized_magic    db  "   Recognized magic: kernel header successfully parsed", 13, 10, 0
+
 ; attempt
 msg_attempt_a20     db      "Attempting to enable A20: ", 0
 msg_attempt_e820    db      "Attempting to build memory map: ", 0
 msg_attempt_cpuid   db      "Attempting to fetch data from CPUID: ", 13, 10, 0
+msg_attempt_kernel_load     db      "Attempting to load kernel header: ", 13, 10, 0
+msg_attempt_header_read     db      "Attempting to read kernel header: ", 13, 10, 0
 
 ; cpuid stuff
 msg_cpuid_unavailable       db      "   CPUID: CPUID feature is unavailable, can not obtain nessary information: Halting CPU.", 13, 10, 0
@@ -718,7 +880,7 @@ msg_cpuid_leaf7_success     db      "   CPUID: Extended Feature Flags detection 
 msg_cpuid_xleaf2to4_failed  db      "   CPUID: Failed to fetch CPU Brand Label", 13, 10, 0
 msg_cpuid_xleaf2to4_success db      "   CPUID: Successfully fetch CPU Brand Label", 13, 10, 0      
 
-; -------------------- random constant space --------------------
+; -------------------- random constant and variable space --------------------
 
 
 global  bios_cursor                 ; linear bios cursor addressing
@@ -728,6 +890,7 @@ global  kernelcode_64bits_descriptor
 global  kerneldata_32bits_descriptor
 
 hex_map                             db      "0123456789ABCDEF"
+bios_cursor                         dd      0x0
 
 CPUID_AMD_CATEGORY                  equ     1
 CPUID_INTEL_CATEGORY                equ     2
@@ -740,7 +903,6 @@ CPUID_VENDOR_TABLE_SIZE             equ     CPUID_VENDOR_COUNT * 12
 E820_signature                      equ     0x534D4150
 E820_entry_size                     equ     24
 
-bios_cursor                         dd      0x0
 null_descriptor                     equ     0x00
 kernelcode_32bits_descriptor        equ     0x08
 kernelcode_64bits_descriptor        equ     0x10

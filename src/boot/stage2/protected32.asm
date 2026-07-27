@@ -30,6 +30,8 @@ protected32_entry:
     mov     ax, ((BG_GREEN | FG_RED) << 8) | 'B'
     call    print_char32
     
+    jmp     stop
+
     xor     ah, ah              ; arg for color
     mov     edi, msg_welcome32 
     call    print_string32 
