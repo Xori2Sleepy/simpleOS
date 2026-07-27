@@ -1,0 +1,55 @@
+[bits 16]
+
+; -------------------- variable space --------------------
+align 16            ; does it even matter?
+; general
+msg_stage2_entry    db      "Second stage active: Executing Instruction ", 13, 10, 0
+msg_cpu_halted      db      "CRITICAL: CPU halted! Please reboot the PC", 13, 10, 0
+msg_far_jump        db      "Preparation complete: Enabling CR0 and attempting a far jump to 32 bits protected mode; Brace for impact and good luck 32 bits code! :)", 13, 10, 0
+msg_gdt             db      "Global Description Table structure defined, loading it to register...", 13, 10, 0
+
+; e820 & e801
+msg_e820_success    db      "E820 memory mapping success!", 13, 10, 0
+msg_e820_failed     db      "E820 memory mapping failed; Attempting fallback method"
+msg_e801_success    db      "E801 memory mapping success: Note that RAM will be limit to 16 Mb", 13, 10, 0
+msg_e801_failed     db      "E801 memroy mapping failed: Memory cannot be map; Halting CPU...", 13, 10, 0
+
+; a20
+msg_a20_success     db      "A20 successfully initialize!", 13, 10, 0
+msg_a20_failed      db      "CRITICAL: Attempted all reliable method. If you see this message, the only way to continue "
+                    db      "is to dig up the bootloader code and manually uncomment other method. Good Luck!", 13, 10, 0
+                    db      "CRITICAL: A20 can not be enable; system can not be safely load: Halting CPU...", 13, 10, 0
+msg_bios_a20_failed db      "BIOS A20 initialization failed. Error code: ", 13, 10, 0
+msg_bios_a20_cont   db      "Attempt other known method for A20 initiation...", 13, 10, 0
+msg_kb_ctrl_failed  db      "Keyboard controller A20 initiation failed. Attmepting other known method...", 13, 10, 0
+msg_ff_failed       db      "System Control Port A A20 initiation failed!", 13, 10
+
+; kernel & disk
+msg_rs_success      db      "   Disk reset success!", 13, 10, 0
+msg_rs_failed       db      "   CRITICAL: Disk reset failed", 13, 10, 0
+msg_disk_success    db      "   Disk read success", 13, 10, 0
+msg_disk_failed     db      "   Disk read error! Error code: ", 0
+msg_kernel_load_success db  "   Kernel header succesfully loaded", 13, 10, 0
+msg_kernel_load_failed  db  "   Kernel header fail to load. Continuing with execution...", 13, 10, 0
+
+; kernel read n stuff
+msg_unrecognized_magic  db  "   Unrecognized magic: kernel header could not be parsed", 13, 10, 0
+msg_recognized_magic    db  "   Recognized magic: kernel header successfully parsed", 13, 10, 0
+
+; attempt
+msg_attempt_a20     db      "Attempting to enable A20: ", 0
+msg_attempt_e820    db      "Attempting to build memory map: ", 0
+msg_attempt_cpuid   db      "Attempting to fetch data from CPUID: ", 13, 10, 0
+msg_attempt_kernel_load     db      "Attempting to load kernel header: ", 13, 10, 0
+msg_attempt_header_read     db      "Attempting to read kernel header: ", 13, 10, 0
+
+; cpuid stuff
+msg_cpuid_unavailable       db      "   CPUID: CPUID feature is unavailable, can not obtain nessary information: Halting CPU.", 13, 10, 0
+msg_cpuid_unknown_vendor    db      "   CPUID: Attempt to detect CPU architecture return unknown vendor!", 13, 10, 0
+msg_cpuid_leaf1_failed      db      "   CPUID: Leaf 1 unavailable: Unable to detect CPU Signature and Base Feature Flags!", 13, 10, 0
+msg_cpuid_leaf1_success     db      "   CPUID: CPU Signature and Base Feature Flags detection success!", 13, 10, 0
+msg_cpuid_leaf7_failed      db      "   CPUID: Leaf 7 unavailable: Unable to detect extended feature flags!", 13, 10, 0
+msg_cpuid_leaf7_success     db      "   CPUID: Extended Feature Flags detection success!", 13, 10, 0
+msg_cpuid_xleaf2to4_failed  db      "   CPUID: Failed to fetch CPU Brand Label", 13, 10, 0
+msg_cpuid_xleaf2to4_success db      "   CPUID: Successfully fetch CPU Brand Label", 13, 10, 0      
+
