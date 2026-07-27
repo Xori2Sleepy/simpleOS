@@ -30,6 +30,8 @@ protected32_entry:
     mov     ax, ((BG_GREEN | FG_RED) << 8) | 'B'
     call    print_char32
     
+    jmp     stop
+
     xor     ah, ah              ; arg for color
     mov     edi, msg_welcome32 
     call    print_string32 
@@ -74,5 +76,5 @@ msg_test_scroll     db      "111111111111111111111111111111111111111111111111111
                     db      "44444444444444444444444444444444444444444444444444444444444444444444444444444444", 13, 10, 0
 msg_esc_seq_test    db      "\heyre\\sponsive?\\holycow\a4a\a6\b2haha", 13, 10, 0
 
-%include "src/boot/stage2/vga_driver.asm"
+%include "src/boot/stage2/32bits/vga_driver.asm"
 

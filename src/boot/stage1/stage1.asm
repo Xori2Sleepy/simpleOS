@@ -20,19 +20,31 @@ start:
     call    print_char
 
 sector_load:
-    dec     byte [counter]      ; if re attempt too many time, halt the cpu
+    dec     byte [disk_trial_counter]      ; if re attempt too many time, halt the cpu
     jz      halt
 
-    mov     bx, 0x7E00
+    mov     dl, [boot_drive]
+    call    disk_check_extensions
+    jc      .chs
+
+.lba:
+    mov     ah, 0x42
+    mov     dl, [boot_drive]
+    mov     si, stage2_dap
+    int     0x13
+    jnc     .success
+    call    disk_error
+    jmp     sector_load
+
+.chs:
     mov     ah, 02h             ; read sector (CHS)
-    mov     al, [sector2read]   ; # of sectors to read
+    mov     al, [stage2_dap.sector2read]
+    mov     bx, 0x7E00
     mov     ch, 0               ; cylinder 0
-    mov     cl, 2               ; read start from sector 2
+    mov     cl, [stage2_dap.sector_ad]
     mov     dh, 0               ; head 0 
     mov     dl, [boot_drive]
-
     int     13h                 ; bios disk service
-
     jnc     .success
     call    disk_error          ; if cf is set it meant int fail
     jmp     sector_load
@@ -44,7 +56,6 @@ sector_load:
     jmp     0000:0x7E00         ; jmp to second stage bootloader!
 
 disk_error:
-
     mov     si, msg_disk_er
     call    print_loop          ; print error message
     
@@ -74,6 +85,25 @@ disk_error:
     call    print_loop
 
 .cont:
+    ret
+
+disk_check_extensions:
+    ; need dl as input drive
+    mov     ah, 41h
+    mov     bx, 55AAh
+    int     0x13
+    jc      .failed
+    
+    cmp     bx, 55AAh       ; compare signature
+    jne     .failed
+    
+    test    cx, 1           ; bit 0 is the extended disk access
+    jz      .failed
+
+    clc
+    ret
+.failed:
+    stc
     ret
 
 halt:
@@ -111,7 +141,7 @@ print_loop:
     popf
     ret
 
-counter     db      4
+disk_trial_counter     db      4
 boot_drive  db      0
 msg         db      "Bootloader loaded! Attemp to load the second stage bootloader...", 13, 10, 0
 msg_disk_er db      "Disk read error! Error code: ", 0 
@@ -119,10 +149,14 @@ msg_disk_sc db      "Disk read success! Jumping to 16 bits real mode", 13, 10, 0
 msg_rs_fail db      "Fatal Error: Disk controller reset fail!", 13, 10, 0
 msg_halt    db      "CPU halting...", 13, 10, 0
 hex_map     db      "0123456789ABCDEF"      ; it used for xlat
-sector2read db      16                      ; a magic number, number of sector to read!
-                                            ; technically this is hardcoded as it depend on the 
-                                            ; second stage to fill enoguht space or shit wont load sector properly
-                                            ; but i am too lazy to implement some dynamic memory fill or whatever
+
+stage2_dap:                    
+    .dap_size           db      0x10        ; size
+    .reserve            db      0x00        ; reserve for int call
+    .sector2read        dw      16          ; sector to read
+    .destination        dw      0x7E00      ; destination offset
+    .segment            dw      0x0000      ; segment offset
+    .sector_ad          dq      2
 
 times 510-($-$$) db 0 ; fill the rest with 0
 dw 0xaa55

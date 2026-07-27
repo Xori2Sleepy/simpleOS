@@ -1,9 +1,10 @@
 all: build
 
 build:
-	nasm -f bin src/boot/boot.asm -o target/stage1.bin -l target/stage1.lst
-	nasm -f bin src/boot/stage2/stage2.asm -o target/stage2.bin -l target/stage2.lst
-	cat target/stage1.bin target/stage2.bin > target/boot.bin
+	nasm -f bin src/boot/stage1/stage1.asm -o target/stage1.bin -l target/stage1.lst
+	nasm -f bin src/boot/stage2/16bits/stage2.asm -o target/stage2.bin -l target/stage2.lst
+	nasm -f bin src/kernel/kernel_0.0.asm -o target/kernel.bin -l target/kernel.lst
+	cat target/stage1.bin target/stage2.bin target/kernel.bin > target/boot.bin
 
 run: build
 	qemu-system-x86_64 \
