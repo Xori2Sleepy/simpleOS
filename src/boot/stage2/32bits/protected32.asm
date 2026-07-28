@@ -17,9 +17,7 @@ protected32_entry:
     mov     fs, ax
     mov     gs, ax
 
-    ; dint uses 7c00 cause old 16 bits stack live there 
-    ; dint uses 9fbff because apprently EBDA can grow into those area...
-    mov     esp, 0x95000
+    mov     esp, 0x7C00
     call    deconstruct_bios_cursor
     call    disable_cursor
     call    enable_cursor

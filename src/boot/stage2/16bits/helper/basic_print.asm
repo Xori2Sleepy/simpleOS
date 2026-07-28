@@ -1,4 +1,6 @@
 [bits 16]
+
+hex_map                             db      "0123456789ABCDEF"
 ; ---------- functions ----------
 ; general purpose function | CRITICAL: USE ONLY IN REAL MODE! 
 ; IT WILL CRASH IF TRY ON PROTECTED MODE!

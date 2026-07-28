@@ -24,6 +24,11 @@ msg_bios_a20_cont   db      "Attempt other known method for A20 initiation...", 
 msg_kb_ctrl_failed  db      "Keyboard controller A20 initiation failed. Attmepting other known method...", 13, 10, 0
 msg_ff_failed       db      "System Control Port A A20 initiation failed!", 13, 10
 
+; vbe
+msg_populate_4f00   db      "successfully populate boot info structure with VBE information", 13, 10, 0
+msg_vbe_4f00_failed db      "CRITICAL: Either function 4F00h interupt 0x10 does not exist, or it return garbage value", 13, 10, 0
+msg_vbe_4f00_detected   db  "VBE information loaded into buffer. Attempting to parse information: ", 0
+
 ; kernel & disk
 msg_rs_success      db      "   Disk reset success!", 13, 10, 0
 msg_rs_failed       db      "   CRITICAL: Disk reset failed", 13, 10, 0

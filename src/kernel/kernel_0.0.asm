@@ -9,5 +9,8 @@ kernel_header:
     .entry64            dd      0
     .required_cpu       dd      0
     .flags              dd      0
+    .preferred_width    dd      0
+    .preferred_height   dd      0
+    .preferred_bpp      dd      0
 
 times 512-($-$$)    db      0

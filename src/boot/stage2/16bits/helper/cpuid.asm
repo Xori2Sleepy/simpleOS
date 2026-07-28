@@ -29,6 +29,7 @@ get_cpuid:
     call    cpu_xleaf2to4_detection        ; xleaf for extended leaf (0x80000000+)
     ret
     
+; -------------------- leaf 0 --------------------  
 cpu_leaf0_detection:
     xor     eax, eax
     cpuid                   ; vendor id in EBX EDX ECX
@@ -83,12 +84,14 @@ cpu_leaf0_detection:
     call    print_loop
     ret
 
+; ------------------- max leaf -------------------  
 max_extended_detection:
     mov     eax, 0x80000000
     cpuid
     mov     dword [boot_info.cpu_max_x_leaf], eax
     ret
 
+; -------------------- leaf 1 --------------------  
 cpu_leaf1_detection:
     cmp     dword [boot_info.cpu_max_leaf], 1
     jb      .failed
@@ -106,6 +109,7 @@ cpu_leaf1_detection:
     call    print_loop
     ret
 
+; -------------------- leaf 7 --------------------  
 cpu_leaf7_detection:
     cmp     dword [boot_info.cpu_max_leaf], 1
     jb      .failed
@@ -124,6 +128,7 @@ cpu_leaf7_detection:
     call    print_loop
     ret
 
+; ----------------- xleaf 2 to 4 -----------------  
 cpu_xleaf2to4_detection:
     mov     eax, [boot_info.cpu_max_x_leaf]
     cmp     eax, 0x80000004
@@ -154,3 +159,13 @@ cpu_xleaf2to4_detection:
     call    print_loop
     ret
 
+; ------------------------------------------------
+;               constant space
+; ------------------------------------------------
+CPUID_AMD_CATEGORY                  equ     1
+CPUID_INTEL_CATEGORY                equ     2
+CPUID_INTEL_COMPATIBLE              equ     3
+CPUID_OTHER_CATEGORY                equ     4
+CPUID_HYPERVISOR                    equ     5
+CPUID_VENDOR_COUNT                  equ     29
+CPUID_VENDOR_TABLE_SIZE             equ     CPUID_VENDOR_COUNT * 12

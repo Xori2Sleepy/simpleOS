@@ -1,5 +1,6 @@
 [bits 16]
 
+; -------------------- disk check ---------------------
 disk_check_extensions:
     ; need dl as input drive
     mov     ah, 41h
@@ -19,6 +20,7 @@ disk_check_extensions:
     stc
     ret
 
+; -------------------- kernel load -------------------- 
 kernel_load:
     dec     byte [disk_trial_counter]
     jz      .kernel_load_failed
@@ -70,6 +72,7 @@ kernel_load:
     mov     [boot_info.kernel_report], si ; clear kernel load status bits
     ret
 
+; --------------------- disk error -------------------- 
 disk_error:
     mov     si, msg_disk_failed
     call    print_error     ; ah already have error
@@ -85,6 +88,7 @@ disk_error:
     call    print_loop
     ret
 
+; -------------------- header read -------------------- 
 kernel_header_read:
     mov     edi, [kernel_dap.destination]   ; magic is loaded
     mov     eax, [edi]
@@ -92,7 +96,7 @@ kernel_header_read:
     jne     .unrecognized_header
 
     mov     eax, [boot_info.kernel_report]
-    mov     ecx, 00000010b
+    mov     ecx, 00000010b                  ; magic match?
     or      eax, ecx
     mov     [boot_info.kernel_report], eax
 

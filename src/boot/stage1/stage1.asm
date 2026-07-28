@@ -10,7 +10,7 @@ start:
     mov     ds, ax
     mov     es, ax
     mov     ss, ax
-    mov     sp, 0x7c00          ; Set stack pointer below the code, safe zone
+    mov     sp, 0x7C00          ; Set stack pointer below the code, safe zone
     sti 
 
     ; printing message, here for testing

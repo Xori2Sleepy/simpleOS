@@ -100,36 +100,13 @@ get_bios_cursor:
     movzx   ebx, dl         ; EBX = Column
     add     eax, ebx        ; EAX = (Row * 80) + Column
 
-    mov     [bios_cursor], eax 
+    mov     [scratchpad], eax 
     ret
-; -------------------- random constant and variable space --------------------
-
-
-global  bios_cursor                 ; linear bios cursor addressing
-global  null_descriptor
-global  kernelcode_32bits_descriptor
-global  kernelcode_64bits_descriptor
-global  kerneldata_32bits_descriptor
-
-hex_map                             db      "0123456789ABCDEF"
-bios_cursor                         dd      0x0
-
-CPUID_AMD_CATEGORY                  equ     1
-CPUID_INTEL_CATEGORY                equ     2
-CPUID_INTEL_COMPATIBLE              equ     3
-CPUID_OTHER_CATEGORY                equ     4
-CPUID_HYPERVISOR                    equ     5
-CPUID_VENDOR_COUNT                  equ     29
-CPUID_VENDOR_TABLE_SIZE             equ     CPUID_VENDOR_COUNT * 12
-
-E820_signature                      equ     0x534D4150
-E820_entry_size                     equ     24
-
-null_descriptor                     equ     0x00
-kernelcode_32bits_descriptor        equ     0x08
-kernelcode_64bits_descriptor        equ     0x10
-kerneldata_32bits_descriptor        equ     0x18
 
 ; ---------- just other stuff ----------
+
+
 %include "src/boot/stage2/32bits/protected32.asm"  ; we seperate the 32bit code, look cleaner. It already a mess here.
 times 8192-($-$$)   db      0
+section .bss
+    scratchpad          resb    1024    ; we only need 512 theoritically but whatever

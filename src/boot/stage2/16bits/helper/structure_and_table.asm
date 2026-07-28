@@ -10,7 +10,23 @@
     db      (%1 >> 24) & 0xFF   ; only need the last 8 bits
 %endmacro
 
+%macro resolution_priority 3
+    db      %1
+    dw      %2
+    dw      %3
+%endmacro
+
 ; -------------------- gdt space ------------------------
+global  null_descriptor
+global  kernelcode_32bits_descriptor
+global  kernelcode_64bits_descriptor
+global  kerneldata_32bits_descriptor
+
+null_descriptor                     equ     0x00
+kernelcode_32bits_descriptor        equ     0x08
+kernelcode_64bits_descriptor        equ     0x10
+kerneldata_32bits_descriptor        equ     0x18
+
 align 8
 gdt_start:
     ; lower limit -> 2 byte (16 bits - 0 - 15)
@@ -59,12 +75,15 @@ kernel_info:
     .entry64            dd      0
     .required_cpu       dd      0
     .flags              dd      0
+    .preferred_bpp      db      0           ; order is important,
+    .preferred_width    dw      0           ; the vbe logic read bpp width and height as a single chunck
+    .preferred_height   dw      0
 
 kernel_dap:                    
     .dap_size           db      0x10        ; size
     .reserve            db      0x00        ; reserve for int call
     .sector2read        dw      0x01        ; sector to read
-    .destination        dw      0x800       ; destination offset, old stack live in that segment should be safe tho, i think
+    .destination        dw      scratchpad  ; we loading header to scratch space
     .segment            dw      0x0000      ; segment offset
     .sector_ad          dq      18
 
@@ -73,11 +92,20 @@ disk_trial_counter      db      4
 ; --------------------  boot info ------------------------
 align 8
 boot_info:
-    .boot_drive         db      0
+    .boot_info_size     dq      0
+    .boot_drive         db      0           ; flag for kernel stuff
+                                            ; 0 <- load status, 1 <- header magic status
     .kernel_report      db      0           ; 8 bits kernel status flags
     .entry_count        dd      0
 
     .reserved       times 3     db      0   ; for alignment
+
+    ;vbe subsection
+    .vbe_version        dw      0
+    .vbe_OEM_string     dd      0           ; useless, i just want it
+    .vbe_capabilities   dd      0
+    .vbe_video_mode_ptr dd      0
+    .vbe_total_memory   dw      0
 
     ;cpuid subsection
     .cpu_features1_ecx  dd      0
@@ -149,3 +177,13 @@ CPUID_VENDOR_CATEGORY:
 
 CPUID_VENDOR_BUFFER:
     times 3     dd      0   ; 12 byte buffer
+
+; -------------------- VBE Priority table --------------------
+vbe_resolution_priority_table:
+    .entries_count      db          5
+    resolution_entries  0, 0, 0             ; place holder that will be populate by kernel header code
+    resolution_entries  32, 1920, 1080
+    resolution_entries  32, 1600, 900
+    resolution_entries  32, 1280, 720
+    resolution_entries  32, 1024, 768
+    resolution_entries  32, 800, 600

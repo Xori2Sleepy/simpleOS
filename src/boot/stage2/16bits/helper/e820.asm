@@ -1,4 +1,8 @@
 [bits 16]
+
+E820_signature                      equ     0x534D4150
+E820_entry_size                     equ     24
+
 ; ------------------ E820 functions ------------------
 detect_memory_e820:
     ; i can already tell this is going to be the most confusing function conceptually
@@ -41,7 +45,7 @@ detect_memory_e820:
     mov     si, msg_e820_failed
     call    print_loop
 
-    ; try fall back method
+    ; E801 fall back, 88h fall back is not worth it, it practiacally unbootable
     mov     ax, 0xE801
     int     0x15
     jc      .e801_failed
@@ -104,3 +108,4 @@ detect_memory_e820:
     mov     si, msg_e801_failed
     call    print_loop
     call    halt
+
