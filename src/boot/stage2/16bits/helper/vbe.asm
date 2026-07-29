@@ -271,7 +271,7 @@ vbe_get_mode_info:
     
     mov     ax, 0               ;segment for mode buffer,
     mov     es, ax
-    mov     di, scratchpad
+    mov     di, scratchpad + 512    ; THIS HAVE CAUSE ME 5 hours of pain and suffering
 
     mov     ax, 0x4F01
     int     10h
@@ -294,7 +294,7 @@ vbe_check_mode:
     ; helper function
     ; need mode info in buffer, and need pointer to structure in ax
     mov     bx, ax
-    mov     si, [scratchpad]
+    mov     si, [scratchpad + 512]
     
     ; this is a must have for sure, auto for graphic flags
     test    si, 1               ; supported?
@@ -303,18 +303,18 @@ vbe_check_mode:
     jz      .failed
     test    si, 1 << 7          ; linear fream buffer
     jz      .failed
-    cmp     byte [scratchpad + 27], 6      ; direct color
+    cmp     byte [scratchpad + 512 + 27], 6      ; direct color
     jne     .failed
 
-    mov     al, byte [scratchpad + 25]
+    mov     al, byte [scratchpad + 512+ 25]
     cmp     al, byte [bx]      ; bpp
     jne     .failed
 
-    mov     ax, [scratchpad + 18]
+    mov     ax, [scratchpad + 512 + 18]
     cmp     ax, [bx + 1]        ; width
     jne     .failed
 
-    mov     ax, [scratchpad + 20]
+    mov     ax, [scratchpad + 512 + 20]
     cmp     ax, [bx + 3]        ; height
     jne     .failed
 
