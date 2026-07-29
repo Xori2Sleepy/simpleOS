@@ -1,4 +1,6 @@
 [bits 16]
+
+hex_map                             db      "0123456789ABCDEF"
 ; ---------- functions ----------
 ; general purpose function | CRITICAL: USE ONLY IN REAL MODE! 
 ; IT WILL CRASH IF TRY ON PROTECTED MODE!
@@ -38,6 +40,12 @@ print_error:
     ; I completly forgot i got this function, actually some how come in handy
     push    ax
     push    bx
+
+    push    ax
+    xor     ax, ax
+    mov     ds, ax
+    pop     ax
+
     call    print_loop
     
     ; print first
@@ -62,5 +70,35 @@ print_error:
     pop     ax
     ret
 
+print_error16:
+    push    ax
+    push    bx
+    push    cx
+    push    dx
 
+    call    print_loop
 
+    mov     dx, ax          ; preserve original value
+    mov     cx, 4
+
+.hex_loop:
+    mov     ax, dx
+    shr     ax, 12          ; highest nibble
+    mov     bx, hex_map
+    and     al, 0Fh
+    xlat
+    call    print_char
+
+    shl     dx, 4           ; bring next nibble up
+    loop    .hex_loop
+
+    mov     al, 13
+    call    print_char
+    mov     al, 10
+    call    print_char
+
+    pop     dx
+    pop     cx
+    pop     bx
+    pop     ax
+    ret

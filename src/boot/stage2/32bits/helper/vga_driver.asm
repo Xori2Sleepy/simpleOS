@@ -17,7 +17,7 @@ deconstruct_bios_cursor:
     ; clobbered: eax, edx, ecx, flags
     ; note: we doesnt care what it clobbered, it call at the start anyway
     xor     edi, edi
-    mov     eax, [bios_cursor]
+    mov     eax, [scratchpad]
     call    position_translate  ; return row and col in al ah respectively
     mov     [current_row], al
     mov     [current_col], ah

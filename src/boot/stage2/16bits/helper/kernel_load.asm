@@ -1,5 +1,8 @@
 [bits 16]
 
+; FATAL ERROR IN THIS FILE IF FAIL, NO REPORT WILL BE RETURN TO BOOT_REPORT
+
+; -------------------- disk check ---------------------
 disk_check_extensions:
     ; need dl as input drive
     mov     ah, 41h
@@ -19,6 +22,7 @@ disk_check_extensions:
     stc
     ret
 
+; -------------------- kernel load -------------------- 
 kernel_load:
     dec     byte [disk_trial_counter]
     jz      .kernel_load_failed
@@ -54,22 +58,16 @@ kernel_load:
     mov     si, msg_kernel_load_success
     call    print_loop
 
-    mov     si, [boot_info.kernel_report]
-    mov     di, 0001b       ; first byte respond to kernel load status
-    or      si, di
-    mov     [boot_info.kernel_report], si
     ret
 
 .kernel_load_failed:
     mov     si, msg_kernel_load_failed
     call    print_loop
 
-    mov     si, [boot_info.kernel_report]
-    mov     di, 11111110b   ; 8 bits
-    and     si, di
-    mov     [boot_info.kernel_report], si ; clear kernel load status bits
+    call    halt            ; fatal error
     ret
 
+; --------------------- disk error -------------------- 
 disk_error:
     mov     si, msg_disk_failed
     call    print_error     ; ah already have error
@@ -85,16 +83,12 @@ disk_error:
     call    print_loop
     ret
 
+; -------------------- header read -------------------- 
 kernel_header_read:
     mov     edi, [kernel_dap.destination]   ; magic is loaded
     mov     eax, [edi]
     cmp     eax, kernel_magic
     jne     .unrecognized_header
-
-    mov     eax, [boot_info.kernel_report]
-    mov     ecx, 00000010b
-    or      eax, ecx
-    mov     [boot_info.kernel_report], eax
 
     mov     si, msg_recognized_magic
     call    print_loop
@@ -105,14 +99,10 @@ kernel_header_read:
     mov     ecx, [kernel_dap.destination + 6] ; header size
     cld 
     rep     movsb
-
-.unrecognized_header:
-    mov     eax, [boot_info.kernel_report]
-    mov     ecx, 11111101b
-    and     eax, ecx
-    mov     [boot_info.kernel_report], eax
-    mov     si, msg_unrecognized_magic
-    call    print_loop
     ret
 
-
+.unrecognized_header:
+    mov     si, msg_unrecognized_magic
+    call    print_loop
+    call    halt        ; fatal error
+    ret
