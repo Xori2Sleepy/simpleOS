@@ -1,4 +1,6 @@
 [bits 16]
+
+; CPUID AVALIABLITY IS FATAL ERROR, OTHER WISE LEAF 1, 7, x2to4 IS NON FATAL, report to 0, 1, 2 respectively
 ; ---------------- CPUID functions -------------------
 get_cpuid:
     pushfd
@@ -103,15 +105,27 @@ cpu_leaf1_detection:
 .done:
     mov     si, msg_cpuid_leaf1_success
     call    print_loop
+
+    mov     al, [boot_report]
+    mov     bl, -1
+    shl     bl, 1
+    and     al, bl          ; clear first bit
+    mov     [boot_report], al
+
     ret
 .failed:
     mov     si, msg_cpuid_leaf1_failed
     call    print_loop
+
+    mov     al, [boot_report]
+    or      al, 1           ; set first bit
+    mov     [boot_report], al
+
     ret
 
 ; -------------------- leaf 7 --------------------  
 cpu_leaf7_detection:
-    cmp     dword [boot_info.cpu_max_leaf], 1
+    cmp     dword [boot_info.cpu_max_leaf], 7
     jb      .failed
     mov     eax, 7
     xor     ecx, ecx
@@ -122,10 +136,20 @@ cpu_leaf7_detection:
 .done:
     mov     si, msg_cpuid_leaf7_success
     call    print_loop
+
+    mov     al, [boot_report]
+    and     al, 11111101b
+    mov     [boot_report], al
+
     ret
 .failed:
     mov     si, msg_cpuid_leaf7_failed
     call    print_loop
+
+    mov     al, [boot_report]
+    or      al, 00000010b
+    mov     [boot_report], al
+
     ret
 
 ; ----------------- xleaf 2 to 4 -----------------  
@@ -153,10 +177,20 @@ cpu_xleaf2to4_detection:
 .done:
     mov     si, msg_cpuid_xleaf2to4_success
     call    print_loop
+
+    mov     al, [boot_report]
+    and     al, 11111011b
+    mov     [boot_report], al
+
     ret
 .failed:
     mov     si, msg_cpuid_xleaf2to4_failed
     call    print_loop
+
+    mov     al, [boot_report]
+    or      al, 00000100b
+    mov     [boot_report], al
+
     ret
 
 ; ------------------------------------------------

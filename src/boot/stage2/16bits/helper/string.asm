@@ -8,6 +8,12 @@ msg_cpu_halted      db      "CRITICAL: CPU halted! Please reboot the PC", 13, 10
 msg_far_jump        db      "Preparation complete: Enabling CR0 and attempting a far jump to 32 bits protected mode; Brace for impact and good luck 32 bits code! :)", 13, 10, 0
 msg_gdt             db      "Global Description Table structure defined, loading it to register...", 13, 10, 0
 
+msg_debug1          db      "db1", 13, 10, 0
+msg_debug2          db      "db2", 13, 10, 0
+msg_debug3          db      "db3", 13, 10, 0
+msg_debug4          db      "DEBUGGING4: ", 0
+msg_test_print      dw      0xAB12
+
 ; e820 & e801
 msg_e820_success    db      "E820 memory mapping success!", 13, 10, 0
 msg_e820_failed     db      "E820 memory mapping failed; Attempting fallback method"
@@ -28,6 +34,11 @@ msg_ff_failed       db      "System Control Port A A20 initiation failed!", 13, 
 msg_populate_4f00   db      "successfully populate boot info structure with VBE information", 13, 10, 0
 msg_vbe_4f00_failed db      "CRITICAL: Either function 4F00h interupt 0x10 does not exist, or it return garbage value", 13, 10, 0
 msg_vbe_4f00_detected   db  "VBE information loaded into buffer. Attempting to parse information: ", 0
+msg_vbe_4f01_mode_found db  "Valid resolution mode number found! Extracting information...", 13, 10, 0
+msg_vbe_4f01_mode_not_found     db      "No valid resolution mode was found!", 13, 10, 0
+msg_vbe_info_loaded db      "Boot info is now populate with nessary information to start graphic", 13, 10, 0
+msg_vbe_info_failed db      "Graphical information can not be obtain! Falling back to VGA", 13, 10, 0
+msg_unsupport_vbe   db      "VBE is avaliable but the version is unsupported", 13, 10, 0
 
 ; kernel & disk
 msg_rs_success      db      "   Disk reset success!", 13, 10, 0

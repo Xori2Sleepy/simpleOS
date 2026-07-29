@@ -10,7 +10,8 @@
     db      (%1 >> 24) & 0xFF   ; only need the last 8 bits
 %endmacro
 
-%macro resolution_priority 3
+; input: bpp, width, height
+%macro resolution_entries 3
     db      %1
     dw      %2
     dw      %3
@@ -64,7 +65,7 @@ gdt_descriptor:
     dd      gdt_start
 
 ; --------------------  kernel info ------------------------
-kernel_magic            equ     0x51414442
+kernel_magic            equ     "QADB"
 
 kernel_info:
     .magic              dd      0
@@ -73,8 +74,9 @@ kernel_info:
     .image_size         dd      0
     .entry32            dd      0           ; off set from image start
     .entry64            dd      0
-    .required_cpu       dd      0
-    .flags              dd      0
+    .required_cpu       dd      0           ; cpuid id shit
+    .flags              dd      0           ; protected; graphic; paging; long_mode
+    .minimum_memory     dq      0
     .preferred_bpp      db      0           ; order is important,
     .preferred_width    dw      0           ; the vbe logic read bpp width and height as a single chunck
     .preferred_height   dw      0
@@ -85,27 +87,52 @@ kernel_dap:
     .sector2read        dw      0x01        ; sector to read
     .destination        dw      scratchpad  ; we loading header to scratch space
     .segment            dw      0x0000      ; segment offset
-    .sector_ad          dq      18
+    .sector_ad          dq      26
 
 disk_trial_counter      db      4
 
 ; --------------------  boot info ------------------------
 align 8
+; if bit is on that mean something wrong, questionable design eh?
+boot_report:
+    times       3       db      0           ; flag and stuff
+    ; 0 <- leaf1
+    ; 1 <- leaf7
+    ; 2 <- xleaf2to4
+    ; 3 <- graphic
+
 boot_info:
     .boot_info_size     dq      0
     .boot_drive         db      0           ; flag for kernel stuff
-                                            ; 0 <- load status, 1 <- header magic status
-    .kernel_report      db      0           ; 8 bits kernel status flags
     .entry_count        dd      0
 
     .reserved       times 3     db      0   ; for alignment
 
-    ;vbe subsection
+    ;vbe 4f00 subsection
     .vbe_version        dw      0
     .vbe_OEM_string     dd      0           ; useless, i just want it
     .vbe_capabilities   dd      0
     .vbe_video_mode_ptr dd      0
     .vbe_total_memory   dw      0
+
+    ;vbe 4f01 subsection
+    .vbe_selected_mode  dw      0
+
+    .vbe_pitch          dw      0
+    .vbe_width          dw      0
+    .vbe_height         dw      0
+
+    .vbe_bpp            db      0
+    .vbe_memory_model   db      0
+
+    .vbe_red_mask       db      0
+    .vbe_red_shift      db      0
+    .vbe_green_mask     db      0
+    .vbe_green_shift    db      0
+    .vbe_blue_mask      db      0
+    .vbe_blue_shift     db      0
+
+    .vbe_framebuffer    dd      0
 
     ;cpuid subsection
     .cpu_features1_ecx  dd      0
@@ -180,7 +207,7 @@ CPUID_VENDOR_BUFFER:
 
 ; -------------------- VBE Priority table --------------------
 vbe_resolution_priority_table:
-    .entries_count      db          5
+    .entries_count      db          6
     resolution_entries  0, 0, 0             ; place holder that will be populate by kernel header code
     resolution_entries  32, 1920, 1080
     resolution_entries  32, 1600, 900
@@ -189,4 +216,4 @@ vbe_resolution_priority_table:
     resolution_entries  32, 800, 600
 
 selected_priority_rank  db      0
-selected_mode           dw      0    
+selected_mode           dw      0 

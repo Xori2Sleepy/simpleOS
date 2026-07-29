@@ -1,4 +1,6 @@
 [bits 16]
+
+; THIS FILE IS FATAL, NO REPORT WILL BE MAKE IF THIS FAIL, IMMEDIETELY HALT
 ; ------------------------------------------------------------ 
 ;                A20 functions start here!
 ; ------------------------------------------------------------ 

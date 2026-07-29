@@ -153,7 +153,7 @@ hex_map     db      "0123456789ABCDEF"      ; it used for xlat
 stage2_dap:                    
     .dap_size           db      0x10        ; size
     .reserve            db      0x00        ; reserve for int call
-    .sector2read        dw      16          ; sector to read
+    .sector2read        dw      24          ; sector to read
     .destination        dw      0x7E00      ; destination offset
     .segment            dw      0x0000      ; segment offset
     .sector_ad          dq      2

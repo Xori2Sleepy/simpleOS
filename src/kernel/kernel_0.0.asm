@@ -1,7 +1,7 @@
 [bits 64]
 ; hey kenrel here?
 kernel_header:
-    .magic              dd      0
+    .magic              dd      "QADB"
     .version            dw      0
     .header_size        dw      0
     .image_size         dd      0

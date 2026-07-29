@@ -18,7 +18,7 @@ stage2_entry:
     mov     si, msg_stage2_entry
     call    print_loop
 
-    mov     si, msg_attempt_cpuid
+    mov     si, msg_attempt_cpuid   
     call    print_loop
     call    get_cpuid
 
@@ -38,8 +38,9 @@ stage2_entry:
     call    print_loop
     call    kernel_header_read
 
+    call    vbe_activate
     call    get_bios_cursor     ; need before jumping, make sure no write to buffer after this!
-    
+
     mov     si, msg_gdt
     call    print_loop
     ; coming for 32 mode. finally, I have escape the shackle of 16 bits programing!
@@ -53,12 +54,10 @@ stage2_entry:
     mov     eax, cr0            ; I just discover that I can use 32 bits regs in real mode...
     or      eax, 1              ; turn the first bits of cr0 on (Protection Enable, PE bits)
 
-
     mov     si, msg_far_jump    ; print stuff before interupt cant be call!
     call    print_loop
 
     mov     cr0, eax            ; protected mode officially on
-
 
     jmp     kernelcode_32bits_descriptor:protected32_entry
 
@@ -70,6 +69,7 @@ stage2_entry:
 %include "src/boot/stage2/16bits/helper/kernel_load.asm"
 %include "src/boot/stage2/16bits/helper/structure_and_table.asm"
 %include "src/boot/stage2/16bits/helper/string.asm"
+%include "src/boot/stage2/16bits/helper/vbe.asm"
 
 ; --------------- small halt functions ---------------
 halt:
@@ -107,6 +107,6 @@ get_bios_cursor:
 
 
 %include "src/boot/stage2/32bits/protected32.asm"  ; we seperate the 32bit code, look cleaner. It already a mess here.
-times 8192-($-$$)   db      0
+times 12288-($-$$)   db      0
 section .bss
     scratchpad          resb    1024    ; we only need 512 theoritically but whatever
