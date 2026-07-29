@@ -187,3 +187,6 @@ vbe_resolution_priority_table:
     resolution_entries  32, 1280, 720
     resolution_entries  32, 1024, 768
     resolution_entries  32, 800, 600
+
+selected_priority_rank  db      0
+selected_mode           dw      0    
