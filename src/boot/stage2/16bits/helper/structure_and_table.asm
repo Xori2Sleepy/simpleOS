@@ -208,12 +208,12 @@ CPUID_VENDOR_BUFFER:
 ; -------------------- VBE Priority table --------------------
 vbe_resolution_priority_table:
     .entries_count      db          6
-    resolution_entries  0, 0, 0             ; place holder that will be populate by kernel header code
+    resolution_entries  32, 1920, 1080            ; place holder that will be populate by kernel header code
     resolution_entries  32, 1920, 1080
     resolution_entries  32, 1600, 900
     resolution_entries  32, 1280, 720
     resolution_entries  32, 1024, 768
     resolution_entries  32, 800, 600
 
-selected_priority_rank  db      0
+selected_priority_rank  dw      0
 selected_mode           dw      0 

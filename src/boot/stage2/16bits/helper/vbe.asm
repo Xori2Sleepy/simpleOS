@@ -1,46 +1,47 @@
 [bits 16]
 
+; non fatal error check later
 vbe_activate:
     call    vbe_4f00            ; load mode number list pointer and information into boot_info's vbe section
     call    vbe_4f01            ; return in selected_mode, carry on if it failed
     jc      .fallback_vga
 
-
     mov     cx, [selected_mode]
     call    vbe_get_mode_info   ; load info to buffer
     jc      .fallback_vga
-    
+    mov     bx, scratchpad + 512
+
     mov     cx, [selected_mode]
     mov     [boot_info.vbe_selected_mode], cx
 
-    mov     cx, [scratchpad + 16]
+    mov     cx, [bx + 16]
     mov     [boot_info.vbe_pitch], cx
-    mov     cx, [scratchpad + 18]
+    mov     cx, [bx + 18]
     mov     [boot_info.vbe_width], cx
-    mov     cx, [scratchpad + 20]
+    mov     cx, [bx + 20]
     mov     [boot_info.vbe_height], cx
 
-    mov     cl, [scratchpad + 25]
+    mov     cl, [bx + 25]
     mov     [boot_info.vbe_bpp], cl
-    mov     cl, [scratchpad + 27]
+    mov     cl, [bx + 27]
     mov     [boot_info.vbe_memory_model], cl
 
-    mov     cl, [scratchpad + 31]
+    mov     cl, [bx + 31]
     mov     [boot_info.vbe_red_mask], cl
-    mov     cl, [scratchpad + 32]
+    mov     cl, [bx + 32]
     mov     [boot_info.vbe_red_shift], cl
 
-    mov     cl, [scratchpad + 33]
+    mov     cl, [bx + 33]
     mov     [boot_info.vbe_green_mask], cl
-    mov     cl, [scratchpad + 34]
+    mov     cl, [bx + 34]
     mov     [boot_info.vbe_green_shift], cl
 
-    mov     cl, [scratchpad + 35]
+    mov     cl, [bx + 35]
     mov     [boot_info.vbe_blue_mask], cl
-    mov     cl, [scratchpad + 36]
+    mov     cl, [bx + 36]
     mov     [boot_info.vbe_blue_shift], cl
 
-    mov     eax, [scratchpad + 40]
+    mov     eax, [bx + 40]
     mov     [boot_info.vbe_framebuffer], eax
 
     mov     si, msg_vbe_info_loaded
@@ -48,7 +49,7 @@ vbe_activate:
 
     call    vbe_4f02
     jc      .fallback_vga
-
+    
     mov     al, [boot_report]
     and     al, 11110111b
     mov     [boot_report], al
@@ -147,45 +148,18 @@ vbe_4f01:
     add     ax, cx                              ; this ensure our selected rank is alway beyond the lowest in table
     mov     [selected_priority_rank], ax
     
+
+
     ; es:di mode list pointer
     mov     ax, [boot_info.vbe_video_mode_ptr + 2]
     mov     es, ax                              ; move to ax first beacuse it weird hardware stuff, cache thing ig?
     mov     di, [boot_info.vbe_video_mode_ptr]  ; mode_number pointer
-    
-
-    mov     ax, [es:di]
-    mov     si, msg_debug4
-    call    print_error16
-
-    mov     ax, [es:di + 2]
-    mov     si, msg_debug4
-    call    print_error16
-
-    mov     ax, es
-    mov     si, msg_debug1
-    call    print_error16
-    mov     ax, di
-    call    print_error16
 
 .mode_number_loop:
     mov     cx, [es:di]                         ; load mode num
     
     cmp     cx, 0xFFFF                          ; last entries in mode list
     je      .done_search
-
-    ; debug
-    push    si
-    push    es
-    mov     ax, [es:di]
-    mov     si, msg_debug4
-    call    print_error16
-    mov     ax, es
-    mov     si, msg_debug1
-    call    print_error16
-    mov     ax, di
-    call    print_error16
-    pop     es
-    pop     si
 
     push    es
     push    di
@@ -196,7 +170,8 @@ vbe_4f01:
     jc      .mode_number_next
 
     ; start from lowest priority
-    mov     bx, vbe_resolution_priority_table.entries_count - 1 ; minus one because we counting backward
+    mov     bx, [vbe_resolution_priority_table.entries_count]
+    dec     bx                                  ; minus one because we counting backward
     mov     cx, bx
     shl     bx, 2
     add     bx, cx                              ; multiply by 5, this compute entries offset
@@ -208,7 +183,7 @@ vbe_4f01:
     push    es
     push    di
     push    bx
-    mov     cx, [es:di]
+    mov     cx, ax                              ; Worst bug - 8 hours, I should really make a bug log
     call    vbe_check_mode                      ; cmp stuff from buffer loaded by _get_mode_info and pointer in ax
     pop     bx
     pop     di
@@ -224,7 +199,6 @@ vbe_4f01:
     mov     [selected_mode], cx
     mov     [selected_priority_rank], bx        ; lower = better, it a multiple of 5 btw
 
-
 .next_priority:
     test    bx, bx
     jz      .mode_number_next
@@ -238,7 +212,7 @@ vbe_4f01:
 
 .done_search:
     mov     ax, [selected_priority_rank]
-    mov     bx, vbe_resolution_priority_table.entries_count
+    mov     bx, [vbe_resolution_priority_table.entries_count]
     mov     cx, bx
     shl     bx, 2
     add     bx, cx
@@ -271,7 +245,7 @@ vbe_get_mode_info:
     
     mov     ax, 0               ;segment for mode buffer,
     mov     es, ax
-    mov     di, scratchpad + 512    ; THIS HAVE CAUSE ME 5 hours of pain and suffering
+    mov     di, (scratchpad + 512)    ; THIS HAVE CAUSE ME 5 hours of pain and suffering
 
     mov     ax, 0x4F01
     int     10h
@@ -306,7 +280,7 @@ vbe_check_mode:
     cmp     byte [scratchpad + 512 + 27], 6      ; direct color
     jne     .failed
 
-    mov     al, byte [scratchpad + 512+ 25]
+    mov     al, byte [scratchpad + 512 + 25]
     cmp     al, byte [bx]      ; bpp
     jne     .failed
 
