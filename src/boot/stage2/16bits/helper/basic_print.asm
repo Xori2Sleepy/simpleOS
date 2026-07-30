@@ -102,3 +102,38 @@ print_error16:
     pop     bx
     pop     ax
     ret
+
+print_error32:
+    push    eax
+    push    ebx
+    push    ecx
+    push    edx
+
+    call    print_loop
+
+    mov     edx, eax        ; preserve original value
+    mov     ecx, 8          ; 8 hex digits
+
+.hex_loop:
+    mov     eax, edx
+    shr     eax, 28         ; highest nibble
+
+    mov     ebx, hex_map
+    and     al, 0Fh
+    xlat
+
+    call    print_char
+
+    shl     edx, 4          ; bring next nibble up
+    loop    .hex_loop
+
+    mov     al, 13
+    call    print_char
+    mov     al, 10
+    call    print_char
+
+    pop     edx
+    pop     ecx
+    pop     ebx
+    pop     eax
+    ret

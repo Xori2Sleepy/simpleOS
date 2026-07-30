@@ -18,6 +18,16 @@ protected32_entry:
     mov     gs, ax
 
     mov     esp, 0x7C00
+    
+    mov     esi, [boot_info.vbe_framebuffer]
+    mov     dword [esi], 0x00FF00FF
+
+    mov     esi, 200
+    mov     edi, 200
+    mov     ecx, 0x00FF00FF
+    call    vbe_draw_pixel
+
+    jmp     stop
     call    deconstruct_bios_cursor
     call    disable_cursor
     call    enable_cursor
@@ -26,13 +36,11 @@ protected32_entry:
     call    move_cursor         ; move cursor to 0,0
     xor     edi, edi
     mov     ax, ((BG_GREEN | FG_RED) << 8) | 'B'
-    call    print_char32
+    call    vga_print_char32
     
-    jmp     stop
-
     xor     ah, ah              ; arg for color
     mov     edi, msg_welcome32 
-    call    print_string32 
+    call    vga_print_string32 
 
     mov     al, [VGA_flags]     ; setting mode
     and     al, 11111000b       ; wiping lower bit
@@ -45,16 +53,16 @@ protected32_entry:
 
     xor     ah, ah              ; defualt color
     mov     edi, msg_test_wrap
-    call    print_string32
+    call    vga_print_string32
 
     xor     ah, ah
     mov     edi, msg_esc_seq_test
-    call    print_string32
+    call    vga_print_string32
 
 
     xor     ah, ah
     mov     edi, msg_test_scroll
-    call    print_string32
+    call    vga_print_string32
         
     jmp     stop
 
@@ -75,4 +83,4 @@ msg_test_scroll     db      "111111111111111111111111111111111111111111111111111
 msg_esc_seq_test    db      "\heyre\\sponsive?\\holycow\a4a\a6\b2haha", 13, 10, 0
 
 %include "src/boot/stage2/32bits/helper/vga_driver.asm"
-
+%include "src/boot/stage2/32bits/helper/graphic_driver.asm"

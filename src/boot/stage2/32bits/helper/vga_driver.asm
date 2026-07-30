@@ -18,12 +18,12 @@ deconstruct_bios_cursor:
     ; note: we doesnt care what it clobbered, it call at the start anyway
     xor     edi, edi
     mov     eax, [scratchpad]
-    call    position_translate  ; return row and col in al ah respectively
+    call    vga_position_translate  ; return row and col in al ah respectively
     mov     [current_row], al
     mov     [current_col], ah
     ret
 
-clear_screen:
+vga_clear_screen:
     ; purpose: clear the screen
     ; input: ah <- color
     push    edi
@@ -41,7 +41,7 @@ clear_screen:
     pop     edi
     ret                         ; es:edi
 
-position_translate:
+vga_position_translate:
     ; purpose: translate between linear and col/row address
     ;        : max input for linear is 2000! and col/row is 25*80!
     ; input: linear input -> edi = 0, eax = linear (or ax is fine)
@@ -98,14 +98,14 @@ move_cursor:
     jz      .skip
     add     al, byte [current_row]      ; eh, dumb logic but it work, sorry man ;-;
     add     ah, byte [current_col]
-    call    grid_normalization 
+    call    vga_grid_normalization 
 
 .skip:
     mov     byte [current_row], al
     mov     byte [current_col], ah
 
     mov     edi, 1
-    call    position_translate  ; return linear address in eax
+    call    vga_position_translate  ; return linear address in eax
     mov     ecx, eax
 
     ; work in 16 bits, VGA card cant understand 32 bits, alledgedly...
@@ -161,7 +161,7 @@ disable_escape_sequence:
     and     al, 11111011b       ; wiping esc seq bit
     mov     [VGA_flags], al
 
-grid_normalization:
+vga_grid_normalization:
     ; I KNOW I KNOW THIS CODE IS HORRIBLE BUT I DONT GOT NO TIME TO WORK ON THIS!
     ; purpose: normalized grid input (row and col) to make it actually make sense. (basically wrapping logic)
     ; input: al = row, ah = col
@@ -192,7 +192,7 @@ grid_normalization:
 
     push    ax
     mov     ah, BG_BLACK
-    call    clear_screen
+    call    vga_clear_screen
     pop     ax
 
     .skip_clear:
@@ -243,7 +243,7 @@ shift_VGA_buffer:
     ret
 
 ; ---------- Print functions ----------  
-print_char32:
+vga_print_char32:
     ; purpose: print a single character, in absolute mode a row/col is needed 
     ;          but relative will print to cursor
     ; input: edi <- mode, ax <- char, if (abs mode)  = row, dh = col, 
@@ -262,7 +262,7 @@ print_char32:
     push    eax
     mov     ax, dx
     mov     edi, 1              ; this is mode argument for functions!
-    call    position_translate  ; linear in eax
+    call    vga_position_translate  ; linear in eax
     shl     eax, 1
     lea     edi, [eax + VGA_buffer_base]
     pop     eax
@@ -274,7 +274,7 @@ print_char32:
     mov     al, [current_row]
     mov     ah, [current_col]
     mov     edi, 1              ; row/col input mode
-    call    position_translate  ; linear in eax
+    call    vga_position_translate  ; linear in eax
     shl     eax, 1
     lea     edi, [eax + VGA_buffer_base]    ; VGA_buffer_base is a constant so it treated as a imm!
     pop     eax
@@ -287,7 +287,7 @@ print_char32:
     pop     esi
     ret
     
-print_string32:
+vga_print_string32:
     ; input regs: edi <- pointer, ah <- 0 (deafult) else uses ah as color
     ;           : also have string parsing function, \ trigger escape sequence
     ;           : \\ will print '\', while \a# where # is a number from 0-F will change background color
@@ -329,7 +329,7 @@ print_string32:
 
     mov     ah, dh              ; moving color into ah
     xor     edi, edi            ; I actually should make a documentation...
-    call    print_char32        ; if even the author is confused by his own function
+    call    vga_print_char32        ; if even the author is confused by his own function
                                 ; i cant begin to imagine the nightmare other potential contributor will have
 
 
@@ -361,7 +361,7 @@ print_string32:
     mov     al, 92
     mov     ah, dh
     xor     edi, edi
-    call    print_char32
+    call    vga_print_char32
     mov     eax, -1
     xor     al, al
     mov     ah, 1

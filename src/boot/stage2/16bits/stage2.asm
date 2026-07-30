@@ -39,10 +39,11 @@ stage2_entry:
     call    kernel_header_read
 
     call    vbe_activate
-    call    get_bios_cursor     ; need before jumping, make sure no write to buffer after this!
+ ;   call    get_bios_cursor     ; need before jumping, make sure no write to buffer after this!
 
-    mov     si, msg_gdt
-    call    print_loop
+  ;  mov     si, msg_gdt
+  ;  call    print_loop
+
     ; coming for 32 mode. finally, I have escape the shackle of 16 bits programing!
     cli
     in      al, 0x70            ; Read current CMOS state
@@ -54,8 +55,8 @@ stage2_entry:
     mov     eax, cr0            ; I just discover that I can use 32 bits regs in real mode...
     or      eax, 1              ; turn the first bits of cr0 on (Protection Enable, PE bits)
 
-    mov     si, msg_far_jump    ; print stuff before interupt cant be call!
-    call    print_loop
+   ; mov     si, msg_far_jump    ; print stuff before interupt cant be call!
+   ; call    print_loop
 
     mov     cr0, eax            ; protected mode officially on
 
