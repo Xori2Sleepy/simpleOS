@@ -25,9 +25,22 @@ protected32_entry:
     mov     esi, 200
     mov     edi, 200
     mov     ecx, 0x00FF00FF
-    call    vbe_draw_pixel
+    call    draw_pixel
+    
+    mov     esi, 1
+    mov     edi, 1
+    mov     edx, 'A'
+    mov     ecx, 0x00FF00FF
+    call    draw_char
+
+    mov     esi, 1
+    mov     edi, 2
+    mov     edx, 'b'
+    mov     ecx, 0x00FF00FF
+    call    draw_char
 
     jmp     stop
+
     call    deconstruct_bios_cursor
     call    disable_cursor
     call    enable_cursor

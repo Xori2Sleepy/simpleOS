@@ -217,3 +217,13 @@ vbe_resolution_priority_table:
 
 selected_priority_rank  dw      0
 selected_mode           dw      0 
+
+; -------------------- VBE information table --------------------
+; uses only at bootloading stage
+vbe_info:
+    .bitmap_width   dd      8           ; default
+    .bitmap_height  dd      8           ; default
+    .max_row        dd      0
+    .max_col        dd      0
+    .rem_x          dd      0
+    .rem_y          dd      0
