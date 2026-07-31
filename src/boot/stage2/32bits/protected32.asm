@@ -19,15 +19,41 @@ protected32_entry:
 
     mov     esp, 0x7C00
     
-    mov     esi, [boot_info.vbe_framebuffer]
-    mov     dword [esi], 0x00FF00FF
+    mov     edi, 8
+    mov     esi, 8
+    mov     edx, 3
+    mov     ecx, 5
+    call    calculate_grid_data
 
-    mov     esi, 200
+    mov     dword [vbe_info.fg_color], 0x00FF00FF
+    mov     dword [vbe_info.bg_color], 0x00FFFF00
+
+    mov     dword [vbe_info.fg_color32], 0x00FF00FF
+    mov     dword [vbe_info.bg_color32], 0x00FFFF00
+
+    call    vbe_clear_screen
+
+    mov     ax, [vbe_info.control_flag]
+    or      ax, 1               ; activate absolute char draw
+    mov     [vbe_info.control_flag], ax
+
     mov     edi, 200
+    mov     esi, 200
     mov     ecx, 0x00FF00FF
-    call    vbe_draw_pixel
+    call    draw_pixel
+    
+    mov     edi, 0
+    mov     esi, 0
+    mov     edx, 'A'
+    call    draw_char
+
+    mov     edi, 0
+    mov     esi, 1
+    mov     edx, 'b'
+    call    draw_char
 
     jmp     stop
+
     call    deconstruct_bios_cursor
     call    disable_cursor
     call    enable_cursor

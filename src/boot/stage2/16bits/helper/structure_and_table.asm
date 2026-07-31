@@ -217,3 +217,27 @@ vbe_resolution_priority_table:
 
 selected_priority_rank  dw      0
 selected_mode           dw      0 
+
+; -------------------- VBE information table --------------------
+; uses only at bootloading stage
+vbe_info:
+    ; bits 0 -> write char mode
+    .control_flag   dw      0
+    .cursor_row     dd      0
+    .cursor_col     dd      0
+    .bitmap_width   dd      8           ; default
+    .bitmap_height  dd      8           ; default
+    .max_row        dd      0
+    .max_col        dd      0
+    .rem_x          dd      0
+    .rem_y          dd      0
+    .fg_color       dd      0
+    .bg_color       dd      0
+    .fg_color32     dd      0
+    .fg_color24     dd      0
+    .fg_color16     dd      0
+    .bg_color32     dd      0
+    .bg_color24     dd      0
+    .bg_color16     dd      0
+    .true_grid_height   dd      0       ; height/width with spacing/margin
+    .true_grid_width    dd      0
