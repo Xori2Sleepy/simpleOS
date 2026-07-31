@@ -8,7 +8,7 @@ ASCII_lookup_table:
     times   32      dd      font_question          ; Fallback to '?' or blank placeholder
 
     ; --- ASCII 32 (Space) ---
-    dd      font_question                   ; Temporary placeholder for space
+    dd      font_space
 
     ; --- ASCII 33 to 47 (Punctuation and Symbols) ---
     dd      font_exclamation                ; 33  (!)
@@ -877,4 +877,14 @@ font_rparen:               ; )
     db      00000100b
     db      00001000b
     db      00110000b
+    db      00000000b
+
+font_space:                ; ' ' 
+    db      00000000b
+    db      00000000b
+    db      00000000b
+    db      00000000b
+    db      00000000b
+    db      00000000b
+    db      00000000b
     db      00000000b

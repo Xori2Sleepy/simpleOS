@@ -140,6 +140,7 @@ disable_cursor:
     mov     al, 00100000b       ; bit 5 = 1, VGA stop render cursor
     out     dx, al
     ret
+
 enable_cursor:
     mov     dx, 0x3D4
     mov     al, 0x0A
