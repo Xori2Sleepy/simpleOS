@@ -1,11 +1,13 @@
 [bits 32]
-; This file is using system V ABI (it meant to be reused in kernel code which I plan to do cross compliling)
+; Using system V ABI (it meant to be reused in kernel code which I plan to do cross compliling)
 
 draw_pixel:
+    ; currently only 32 bpp supported
     ; input: x in edi ; input y in esi ; edx = color
-    ; off set calculation
+    ; off set calculation 
     mov     al, [boot_info.vbe_bpp]
     shr     al, 3
+
     movzx   eax, al
     imul    eax, edi        ; edi useless now
     movzx   edi, word [boot_info.vbe_pitch]
@@ -30,13 +32,13 @@ calculate_grid_data:
     add     esi, ecx
     mov     [vbe_info.true_grid_height], esi
 
-    mov     eax, [boot_info.vbe_width]
+    movzx   eax, word [boot_info.vbe_width]
     xor     edx, edx
     div     edi             ; EDX:EAX / EDI
     mov     [vbe_info.max_col], eax
     mov     [vbe_info.rem_x], edx    ; remnent pixel
 
-    mov     eax, [boot_info.vbe_height]
+    movzx   eax, word [boot_info.vbe_height]
     xor     edx, edx
     div     esi
     mov     [vbe_info.max_row], eax
@@ -45,7 +47,8 @@ calculate_grid_data:
     ret
 
 draw_char:
-    ; input: row coordinate in edi ; col coordinate in esi ; ASCII char in edx ; color in structure ; control bits 1 for mode
+    ; currently only 32
+    ; input: row coordinate in edi ; col coordinate in esi ; ASCII char in edx ; color in structure ; control bits 0 for mode
     ; output: NA
     ; clobbered:
     ; note: [ASCII_lookup_table + ascii char #] = pointer to char bit map
@@ -76,13 +79,29 @@ draw_char:
     ; write to grid logic
     xor     ecx, ecx        ; row counter
 .char_loop:
-    
     mov     al, [edx + ecx] ; first row (byte) into al
     xor     ebx, ebx        ; col counter
 
 .draw_row_loop:
     shl     al, 1           ; extract bit into carry (this is a MSB and LSB bs)
     jc      .draw
+ 
+    pushad
+    ; we need to move edi + ecx to esi and esi + edx to edi, confusing I know!
+    mov     ax, word [vbe_info.control_flag]
+    and     ax, 16          ; 4th bits isolated
+    test    ax, ax
+    jz      .skip_background
+    mov     eax, esi
+    add     edi, ecx
+    mov     esi, edi        ; esi = edi + ecx <- row address + row counter
+    add     eax, ebx
+    mov     edi, eax        ; edi = esi + edx <- col address + col counter
+
+    mov     edx, [vbe_info.bg_color]
+    call    draw_pixel
+.skip_background:
+    popad
 
     inc     ebx
     cmp     ebx, 8          ; too much
@@ -97,8 +116,10 @@ draw_char:
     mov     esi, edi        ; esi = edi + ecx <- row address + row counter
     add     eax, ebx
     mov     edi, eax        ; edi = esi + edx <- col address + col counter
+
     mov     edx, [vbe_info.fg_color]
-    call   draw_pixel
+    call    draw_pixel
+
     popad
 
     inc     ebx             ; next pixel in the row (col inc)
@@ -115,19 +136,134 @@ draw_char:
 .done:
     ret
 
-vbe_clear_screen:
-    ; ecx = width * height * (bpp/8) = total byte to write to buffer
-    xor     edx, edx
-    mov     eax, [boot_info.vbe_bpp]
-    shr     eax, 3          ; bpp / 8
-    mov     edi, [boot_info.vbe_width]
-    mul     edi             ; (bpp/8) * width -> eax
-    mov     edi, [boot_info.vbe_height]
-    xor     edx, edx
-    mul     edi             ; (bpp/8) * width -> eax
+draw_string:
+    ; input: pointer in edi ; no mode -> if user want abs string print, remember old address and uses mov_cursor 
+    ; output: NA
+    ; clobbered:
+    push    ebx
+    mov     bx, [vbe_info.control_flag]
+    and     bx, 8           ; on = esc ; off = disable
 
+    mov     esi, edi
+    mov     ax, [vbe_info.control_flag]
+    push    eax             ; function are responsible for control flag perservation
+    and     ax, -4          ; turn bit 0 and 1 off (selecte relative print char and incrimental cursor move)
+    mov     [vbe_info.control_flag], ax
+    xor     eax, eax
+
+.loop:
+    lodsb                   ; load char from [esi] into AL
+    movzx   edx, al
+
+    cmp     edx, 0
+    je      .done
+    test    bx, bx          ; esc seq bit
+    jz      .skip_esc
+
+    cmp     edx, 92         ; if bit on esc seq can be detected
+    je      .esc_seq
+
+.skip_esc:
+    cmp     edx, 10
+    je      .line_feed
+    cmp     edx, 13
+    je      .carriage_return
+
+    push    esi 
+    call    draw_char       ; auto translate ASCII to printable pixel
+
+    xor     edi, edi
+    mov     esi, 1
+    call    vbe_move_cursor
+
+    pop     esi
+    jmp     .loop
+
+.done:
+    pop     eax              ; we return og flags to memory
+    mov     [vbe_info.control_flag], ax
+    pop     ebx
+    ret
+
+.line_feed:
+    push    esi
+    mov     edi, 1
+    xor     esi, esi
+    call    vbe_move_cursor
+    pop     esi
+    jmp     .loop
+
+.carriage_return:
+    push    esi
+    mov     ax, [vbe_info.control_flag]
+    push    eax
+    or      ax, 2          ; absolute
+    mov     [vbe_info.control_flag], ax
+
+    mov     edi, [vbe_info.cursor_row]
+    xor     esi, esi
+    call    vbe_move_cursor
+
+    pop     eax
+    mov     [vbe_info.control_flag], ax
+    pop     esi
+    jmp     .loop
+
+.esc_seq:
+    mov     al, byte [esi]   
+    movzx   edx, al
+
+    cmp     edx, 92
+    je      .backslash_handling
+    cmp     edx, 'a'
+    je      .bg_color_handling
+    cmp     edx, 'b'
+    je      .fg_color_handling
+
+    jmp     .loop           ; nothing found? return
+
+.backslash_handling:
+    push    esi
+
+    mov     edx, 92
+    call    draw_char
+    xor     edi, edi
+    mov     esi, 1
+    call    vbe_move_cursor
+
+    pop     esi
+    jmp     .loop
+
+.bg_color_handling:
+    xor     eax, eax
+    mov     al, [esi + 1]
+    call    vbe_convert_ascii2int
+    mov     edx, vbe_color_preset_table
+    mov     edx, dword [edx + eax]
+    mov     [vbe_info.bg_color], edx
+    jmp     .loop
+
+.fg_color_handling:
+    mov     al, [esi + 1]
+    call    vbe_convert_ascii2int
+    mov     edx, vbe_color_preset_table
+    mov     edx, dword [edx + eax]
+    mov     [vbe_info.fg_color], edx
+    jmp     .loop
+
+vbe_clear_screen:
+    ; no input
+    ; ecx = width * height * (bpp/8) = total byte to write to buffer
+    xor     eax, eax
+    mov     al, [boot_info.vbe_bpp]
+    shr     al, 3           ; bpp / 8
+
+    xor     edi, edi
+
+    movzx   eax, word [boot_info.vbe_pitch]
+    movzx   edx, word [boot_info.vbe_height]
+    imul    eax, edx
     mov     ecx, eax
-    mov     esi, eax
 
     mov     edi, [boot_info.vbe_framebuffer]
     cld                     ; eax, edi, ecx ready
@@ -147,68 +283,32 @@ vbe_clear_screen:
     cld
     rep     stosd
     ret
+
 .clear24:
-    mov     ax, [vbe_info.bg_color24]
-    shr     ecx, 1          ; div by 2 for word
-    and     esi, 
-    cld
-    rep     stosw
-    mov     ecx, esi
-    rep     stosb
+    ; write repeating BGR bytes
+    mov     al, [vbe_info.bg_color24]
+    mov     ah, [vbe_info.bg_color24 + 1]
+    mov     dl, [vbe_info.bg_color24 + 2]
+
+.loop24:
+    cmp     ecx, 3
+    jb      .done24
+
+    stosw
+    mov     [edi], dl
+    inc     edi
+
+    sub     ecx, 3
+    jmp     .loop24
+
+.done24:
     ret
+
 .clear16:
     mov     ax, [vbe_info.bg_color16]
     shr     ecx, 1          ; div by 2 for word
     cld
-    rep     stosb
-    ret
-
-vbe_clear_screen2:
-    mov     eax, [boot_info.vbe_width]
-    imul    eax, [boot_info.vbe_height]
-    mov eax, [boot_info.vbe_width]
-    imul eax, [boot_info.vbe_height]
-    mov ecx, eax                    ; number of pixels
-
-    mov edi, [boot_info.vbe_framebuffer]
-    mov eax, [vbe_info.bg_color]
-    cld
-
-    mov edx, [boot_info.vbe_bpp]
-    cmp edx, 32
-    je .clear32
-    cmp edx, 24
-    je .clear24
-    cmp edx, 16
-    je .clear16
-    cmp edx, 8
-    je .clear8
-    ret
-
-.clear32:
-    rep stosd
-    ret
-
-.clear16:
-    rep stosw
-    ret
-
-.clear8:
-    rep stosb
-    ret
-
-.clear24:
-    ; write 3 bytes per pixel
-    push ecx
-.loop:
-    mov [edi], ax
-    shr eax, 16
-    mov [edi+2], al
-    ; restore eax if needed
-    ; ...
-    add edi, 3
-    loop .loop
-    pop ecx
+    rep     stosw
     ret
 
 vbe_move_cursor:
@@ -229,13 +329,78 @@ vbe_move_cursor:
     call    vbe_normalized
     mov     [vbe_info.cursor_row], edi
     mov     [vbe_info.cursor_col], esi
+    ret
 
 vbe_normalized:
-    ; input: row in edi ; col in esi ; control bits 2 and 3 for mode
+    ; input: row in edi ; col in esi ; control bits 2 for mode
     ; output: row in edi ; col in esi
     ; clobbered: 
-    mov     ax, [vbe_info.control_flag]
-    and     ax, 12          ; isolate bits 2 and 3 ( value 4 + 8)
+    mov     dx, [vbe_info.control_flag]
+    and     dx, 4           ; isolate bits 2 (value 4)
+    mov     ecx, [vbe_info.max_row]
+    mov     ebx, [vbe_info.max_col]
+
+.normalize_col:
+    cmp     esi, ebx
+    jb      .normalize_row
+    sub     esi, ebx        ; if esi >= limit, fall here
+    inc     edi             ; inc row
+    jmp     .normalize_col
+
+.normalize_row:
+    cmp     edi, ecx
+    jb      .done
+
+.wrap_top:
+    cmp     dx, 4
+    jne     .skip_clear
+
+    push    eax
+    push    ecx
+    push    edx
+    call    vbe_clear_screen
+    pop     edx
+    pop     ecx
+    pop     eax
+
+.skip_clear:
+    sub     edi, ecx
+    jmp     .normalize_row
+.done:
+    ret
     
+vbe_convert_ascii2int:
+    ; purpose: convert ascii (0 to 9 & a to z & A to Z) to raw integer based on hex
+    ; input: al <- ASCII
+    ; output: al
+    ; clobered: flags, al
+    cmp     al, '9'
+    jbe     .is_digit           ; # come before letter, if it doesnt jmp it lettert
     
+    or      al, 0x20            ; convert capital to lower
+    sub     al, 0x57            
+    ret
+.is_digit:
+    sub     al, 0x30
+    ret
+
+vbe_color_preset_table:
+    dd      0x00000000    ; 0  Black
+    dd      0x000000AA    ; 1  Blue
+    dd      0x0000AA00    ; 2  Green
+    dd      0x0000AAAA    ; 3  Cyan
+    dd      0x00AA0000    ; 4  Red
+    dd      0x00AA00AA    ; 5  Magenta
+    dd      0x00AA5500    ; 6  Brown
+    dd      0x00AAAAAA    ; 7  Light Gray
+
+    dd      0x00555555    ; 8  Dark Gray
+    dd      0x005555FF    ; 9  Light Blue
+    dd      0x0055FF55    ; A  Light Green
+    dd      0x0055FFFF    ; B  Light Cyan
+    dd      0x00FF5555    ; C  Light Red
+    dd      0x00FF55FF    ; D  Light Magenta
+    dd      0x00FFFF55    ; E  Yellow
+    dd      0x00FFFFFF    ; F  White
+
 %include "src/boot/stage2/32bits/helper/font_table.asm"

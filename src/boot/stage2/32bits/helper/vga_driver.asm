@@ -169,8 +169,8 @@ vga_grid_normalization:
     ; output: al = row, ah = col ; but normalized! (why am i writing a comment inside a comment???)
     ;     : edi mode select - 00 (wrap top) 01 (wrap top clear) 10 (scroll wrap) 11 (scroll wrap buffer history)
     ; every 80 colums become one row
-    mov     edi, [VGA_flags]
-    and     edi, 00000011b  ; only the first 2 bit respond to normalization mode
+    mov     bl, [VGA_flags]
+    and     bl, 00000011b  ; only the first 2 bit respond to normalization mode
 
     .normalize_col:
     cmp     ah, col_limit + 1
@@ -184,11 +184,11 @@ vga_grid_normalization:
     cmp     al, row_limit + 1   ; only come here if we confirm that col is within limit
     jb      .done
 
-    cmp     edi, 10b
+    cmp     bl, 10b
     jae     .scroll_wrap
 
     .wrap_top:
-    cmp     edi, 01b
+    cmp     bl, 01b
     jne     .skip_clear
 
     push    ax
@@ -297,9 +297,11 @@ vga_print_string32:
     pushf
     cld
     mov     esi, edi    ; esi is used by lodsb
-    mov     edi, [VGA_flags]
-    shr     edi, 2      ; now 3rd bit is the LSB
-    and     edi, 1      ; isolate third
+
+    mov     bl, [VGA_flags]
+    shr     bl, 2      ; now 3rd bit is the LSB
+    and     bl, 1      ; isolate third
+
     mov     dh, ah      ; use provide color, overwrite if needed
     test    ah, ah
     jnz     .loop
@@ -312,7 +314,7 @@ vga_print_string32:
     cmp     al, 0
     je      .done
        
-    cmp     edi, 0
+    cmp     bl, 0
     je      .skip_esc
     cmp     al, 92
     je      .escape_sequence

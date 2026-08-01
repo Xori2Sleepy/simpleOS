@@ -392,8 +392,8 @@ font_a_lower:
 font_b_lower:
     db      10000000b
     db      10000000b
+    db      10000000b
     db      11111100b
-    db      10000010b
     db      10000010b
     db      10000010b
     db      11111100b
@@ -412,8 +412,8 @@ font_c_lower:
 font_d_lower:
     db      00000010b
     db      00000010b
+    db      00000010b
     db      01111110b
-    db      10000010b
     db      10000010b
     db      10000010b
     db      01111110b
@@ -430,13 +430,13 @@ font_e_lower:
     db      00000000b
 
 font_f_lower:
-    db      00111100b
-    db      01000000b
+    db      00000000b
+    db      00011111b
+    db      00100000b
     db      11111100b
-    db      01000000b
-    db      01000000b
-    db      01000000b
-    db      01000000b
+    db      00100000b
+    db      00100000b
+    db      00100000b
     db      00000000b
 
 font_g_lower:
@@ -490,23 +490,23 @@ font_k_lower:
     db      00000000b
 
 font_l_lower:
-    db      00111000b
-    db      00010000b
-    db      00010000b
-    db      00010000b
-    db      00010000b
-    db      00010000b
-    db      01111110b
+    db      00011000b
+    db      00011000b
+    db      00011000b
+    db      00011000b
+    db      00011000b
+    db      00011000b
+    db      00011000b
     db      00000000b
 
 font_m_lower:
     db      00000000b
     db      00000000b
-    db      11010110b
-    db      10101001b
-    db      10101001b
-    db      10101001b
-    db      10101001b
+    db      01110110b
+    db      10011001b
+    db      10011001b
+    db      10011001b
+    db      10011001b
     db      00000000b
 
 font_n_lower:
@@ -552,8 +552,8 @@ font_q_lower:
 font_r_lower:
     db      00000000b
     db      00000000b
-    db      11011000b
-    db      10100100b
+    db      11111000b
+    db      10000100b
     db      10000000b
     db      10000000b
     db      10000000b
@@ -571,12 +571,12 @@ font_s_lower:
 
 font_t_lower:
     db      00000000b
-    db      01000000b
+    db      00100000b
     db      11111100b
-    db      01000000b
-    db      01000000b
-    db      01000010b
-    db      00111100b
+    db      00100000b
+    db      00100000b
+    db      00100010b
+    db      00011100b
     db      00000000b
 
 font_u_lower:
@@ -591,12 +591,12 @@ font_u_lower:
 
 font_v_lower:
     db      00000000b
-    db      00000000b
-    db      10000010b
-    db      10000010b
-    db      01000100b
-    db      01000100b
-    db      00101000b
+    db      10000001b
+    db      01000010b
+    db      01000010b
+    db      00100100b
+    db      00100100b
+    db      00011000b
     db      00000000b
 
 font_w_lower:
@@ -610,10 +610,10 @@ font_w_lower:
     db      00000000b
 
 font_x_lower:
-    db      00000000b
-    db      00000000b
     db      10000001b
     db      01000010b
+    db      00100100b
+    db      00011000b
     db      00100100b
     db      01000010b
     db      10000001b
@@ -627,7 +627,7 @@ font_y_lower:
     db      00101000b
     db      00010000b
     db      00100000b
-    db      00000000b
+    db      01000000b
 
 font_z_lower:
     db      00000000b
@@ -642,9 +642,9 @@ font_z_lower:
 font_0:
     db      00111100b
     db      01000010b
-    db      10010001b
-    db      10101001b
-    db      11000101b
+    db      10000001b
+    db      11111111b
+    db      10000001b
     db      01000010b
     db      00111100b
     db      00000000b
