@@ -25,10 +25,7 @@ protected32_entry:
     mov     ecx, 5
     call    calculate_grid_data
 
-    mov     dword [vbe_info.fg_color], 0x00FFFFFF
-    mov     dword [vbe_info.bg_color], 0x00FF00FF
-
-    mov     dword [vbe_info.fg_color32], 0x00FF00FF
+    mov     dword [vbe_info.fg_color32], 0x00FFFFFF
     mov     dword [vbe_info.bg_color32], 0x00000000
 
     mov     ax, [vbe_info.control_flag]
@@ -45,6 +42,10 @@ protected32_entry:
     or      ax, 2             ; turn bit 1 (move abs) on for absolute cursor move
     mov     [vbe_info.control_flag], ax
 
+    mov     ax, [vbe_info.control_flag]
+    or      ax, 16            ; background write on
+    mov     [vbe_info.control_flag], ax
+
     mov     edi, 20
     mov     esi, 2
     call    vbe_move_cursor
@@ -53,7 +54,7 @@ protected32_entry:
     call    draw_string
     mov     edi, msg_testabc
     call    draw_string
-    mov     edi, msg_test_msg
+    mov     edi, msg_esc_seq_test
     call    draw_string
 
     mov     edi, 10
@@ -66,7 +67,8 @@ protected32_entry:
     mov     edx, 'b'
     call    draw_char
 
-    jmp     stop
+    mov     edi, 0x1
+ ;   call    terminal_clear_screen
 
     call    deconstruct_bios_cursor
     call    disable_cursor
@@ -120,10 +122,11 @@ msg_test_scroll     db      "111111111111111111111111111111111111111111111111111
                     db      "44444444444444444444444444444444444444444444444444444444444444444444444444444444"
                     db      "44444444444444444444444444444444444444444444444444444444444444444444444444444444"
                     db      "44444444444444444444444444444444444444444444444444444444444444444444444444444444", 13, 10, 0
-msg_esc_seq_test    db      "\heyre\\sponsive?\\holycow\a4a\a6\b2haha", 13, 10, 0
+msg_esc_seq_test    db      "\hey\\sponsive?\\holycow\a2a\a4\b6haha", 13, 10, 0
 msg_test            db      "hello", 0
 msg_testabc         db      "abcdefhijklmnopqrstuvwxyz1234567890()*%?<>|", 13, 10, 0
 msg_test_msg        db      "What sup man this is most likely some of the ugliest font you seen ever", 0
 
 %include "src/boot/stage2/32bits/helper/vga_driver.asm"
 %include "src/boot/stage2/32bits/helper/graphic_driver.asm"
+%include "src/boot/stage2/32bits/helper/terminal_interface.asm"

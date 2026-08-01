@@ -1,6 +1,6 @@
 [bits 32]
 ; Using system V ABI (it meant to be reused in kernel code which I plan to do cross compliling)
-
+; NOTE: Code is not consistent here, some function support modular bpp, some dont. Also bits map print is not consistent
 draw_pixel:
     ; currently only 32 bpp supported
     ; input: x in edi ; input y in esi ; edx = color
@@ -98,7 +98,7 @@ draw_char:
     add     eax, ebx
     mov     edi, eax        ; edi = esi + edx <- col address + col counter
 
-    mov     edx, [vbe_info.bg_color]
+    mov     edx, [vbe_info.bg_color32]
     call    draw_pixel
 .skip_background:
     popad
@@ -117,7 +117,7 @@ draw_char:
     add     eax, ebx
     mov     edi, eax        ; edi = esi + edx <- col address + col counter
 
-    mov     edx, [vbe_info.fg_color]
+    mov     edx, [vbe_info.fg_color32]
     call    draw_pixel
 
     popad
@@ -141,6 +141,11 @@ draw_string:
     ; output: NA
     ; clobbered:
     push    ebx
+    mov     ebx, [vbe_info.bg_color32]
+    push    ebx
+    mov     ebx, [vbe_info.fg_color32]
+    push    ebx
+    
     mov     bx, [vbe_info.control_flag]
     and     bx, 8           ; on = esc ; off = disable
 
@@ -182,6 +187,10 @@ draw_string:
 .done:
     pop     eax              ; we return og flags to memory
     mov     [vbe_info.control_flag], ax
+    pop     ebx
+    mov     [vbe_info.fg_color32], ebx
+    pop     ebx
+    mov     [vbe_info.bg_color32], ebx      ; perserving og color so esc seq doesnt change it
     pop     ebx
     ret
 
@@ -230,25 +239,29 @@ draw_string:
     xor     edi, edi
     mov     esi, 1
     call    vbe_move_cursor
-
     pop     esi
+    add     esi, 1
     jmp     .loop
 
 .bg_color_handling:
     xor     eax, eax
     mov     al, [esi + 1]
     call    vbe_convert_ascii2int
+    shl     eax, 2
     mov     edx, vbe_color_preset_table
     mov     edx, dword [edx + eax]
-    mov     [vbe_info.bg_color], edx
+    mov     [vbe_info.bg_color32], edx
+    add     esi, 2
     jmp     .loop
 
 .fg_color_handling:
     mov     al, [esi + 1]
     call    vbe_convert_ascii2int
+    shl     eax, 2
     mov     edx, vbe_color_preset_table
     mov     edx, dword [edx + eax]
-    mov     [vbe_info.fg_color], edx
+    mov     [vbe_info.fg_color32], edx
+    add     esi, 2
     jmp     .loop
 
 vbe_clear_screen:
@@ -393,7 +406,6 @@ vbe_color_preset_table:
     dd      0x00AA00AA    ; 5  Magenta
     dd      0x00AA5500    ; 6  Brown
     dd      0x00AAAAAA    ; 7  Light Gray
-
     dd      0x00555555    ; 8  Dark Gray
     dd      0x005555FF    ; 9  Light Blue
     dd      0x0055FF55    ; A  Light Green

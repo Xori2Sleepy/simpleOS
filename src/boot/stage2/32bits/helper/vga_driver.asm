@@ -26,6 +26,7 @@ deconstruct_bios_cursor:
 vga_clear_screen:
     ; purpose: clear the screen
     ; input: ah <- color
+    ; clobbered: NA
     push    edi
     push    ecx
     push    ax

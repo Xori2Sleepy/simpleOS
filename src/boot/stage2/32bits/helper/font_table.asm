@@ -78,7 +78,7 @@ ASCII_lookup_table:
 
     ; --- ASCII 91 to 96 (Brackets and Symbols) ---
     dd      font_question                   ; 91  ([)
-    dd      font_question                   ; 92  (\)
+    dd      font_backslash                  ; 92  (\)
     dd      font_question                   ; 93  (])
     dd      font_question                   ; 94  (^)
     dd      font_underscore                 ; 95  (_)
@@ -490,13 +490,13 @@ font_k_lower:
     db      00000000b
 
 font_l_lower:
-    db      00011000b
-    db      00011000b
-    db      00011000b
-    db      00011000b
-    db      00011000b
-    db      00011000b
-    db      00011000b
+    db      00010000b
+    db      00010000b
+    db      00010000b
+    db      00010000b
+    db      00010000b
+    db      00010000b
+    db      00010000b
     db      00000000b
 
 font_m_lower:
@@ -887,4 +887,14 @@ font_space:                ; ' '
     db      00000000b
     db      00000000b
     db      00000000b
+    db      00000000b
+
+font_backslash:
+    db      10000000b
+    db      01000000b
+    db      00100000b
+    db      00010000b
+    db      00001000b
+    db      00000100b
+    db      00000010b
     db      00000000b
