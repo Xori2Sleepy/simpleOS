@@ -235,9 +235,11 @@ vbe_info:
     .bg_color       dd      0
     .fg_color32     dd      0
     .fg_color24     dd      0
-    .fg_color16     dd      0
+    .fg_color16     dw      0
+    .fg_color8      db      0
     .bg_color32     dd      0
     .bg_color24     dd      0
-    .bg_color16     dd      0
+    .bg_color16     dw      0
+    .bg_color8      db      0
     .true_grid_height   dd      0       ; height/width with spacing/margin
     .true_grid_width    dd      0

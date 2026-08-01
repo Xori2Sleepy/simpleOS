@@ -31,10 +31,8 @@ protected32_entry:
     mov     dword [vbe_info.fg_color32], 0x00FF00FF
     mov     dword [vbe_info.bg_color32], 0x00FFFF00
 
-    call    vbe_clear_screen
-
     mov     ax, [vbe_info.control_flag]
-    or      ax, 1               ; activate absolute char draw
+    and     ax, -2              ; turn LSB (print char control) off for relative print
     mov     [vbe_info.control_flag], ax
 
     mov     edi, 200
@@ -49,6 +47,17 @@ protected32_entry:
 
     mov     edi, 0
     mov     esi, 1
+    mov     edx, 'b'
+    call    draw_char
+
+    call    vbe_clear_screen
+
+    mov     edi, 20
+    mov     esi, 30
+    call    vbe_move_cursor
+    mov     edx, 'A'
+    call    draw_char
+
     mov     edx, 'b'
     call    draw_char
 
