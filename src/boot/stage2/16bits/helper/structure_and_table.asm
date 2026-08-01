@@ -221,7 +221,7 @@ selected_mode           dw      0
 ; -------------------- VBE information table --------------------
 ; uses only at bootloading stage
 vbe_info:
-    ; bits 0 -> write char mode
+    ; bits 0 -> write char mode, 1 -> cursor move ; 2 -> normalized mode ; 3 -> esc-seq 
     .control_flag   dw      0
     .cursor_row     dd      0
     .cursor_col     dd      0
