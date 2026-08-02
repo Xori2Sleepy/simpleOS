@@ -107,9 +107,7 @@ cpu_leaf1_detection:
     call    print_loop
 
     mov     al, [boot_report]
-    mov     bl, -1
-    shl     bl, 1
-    and     al, bl          ; clear first bit
+    or      al, 1          ; turn first bit on
     mov     [boot_report], al
 
     ret
@@ -118,7 +116,7 @@ cpu_leaf1_detection:
     call    print_loop
 
     mov     al, [boot_report]
-    or      al, 1           ; set first bit
+    and     al, -2           ; clear first bit
     mov     [boot_report], al
 
     ret
@@ -138,7 +136,7 @@ cpu_leaf7_detection:
     call    print_loop
 
     mov     al, [boot_report]
-    and     al, 11111101b
+    or      al, 2
     mov     [boot_report], al
 
     ret
@@ -147,7 +145,7 @@ cpu_leaf7_detection:
     call    print_loop
 
     mov     al, [boot_report]
-    or      al, 00000010b
+    and     al, -3
     mov     [boot_report], al
 
     ret
@@ -179,7 +177,7 @@ cpu_xleaf2to4_detection:
     call    print_loop
 
     mov     al, [boot_report]
-    and     al, 11111011b
+    or      al, 4
     mov     [boot_report], al
 
     ret
@@ -188,7 +186,7 @@ cpu_xleaf2to4_detection:
     call    print_loop
 
     mov     al, [boot_report]
-    or      al, 00000100b
+    and     al, -5
     mov     [boot_report], al
 
     ret

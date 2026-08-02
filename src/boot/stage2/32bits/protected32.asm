@@ -18,17 +18,14 @@ protected32_entry:
     mov     gs, ax
 
     mov     esp, 0x7C00
-    
+    ; ------------------------
     mov     edi, 8
     mov     esi, 8
     mov     edx, 3
     mov     ecx, 5
     call    calculate_grid_data
 
-    mov     dword [vbe_info.fg_color], 0x00FFFFFF
-    mov     dword [vbe_info.bg_color], 0x00FF00FF
-
-    mov     dword [vbe_info.fg_color32], 0x00FF00FF
+    mov     dword [vbe_info.fg_color32], 0x00FFFFFF
     mov     dword [vbe_info.bg_color32], 0x00000000
 
     mov     ax, [vbe_info.control_flag]
@@ -45,6 +42,10 @@ protected32_entry:
     or      ax, 2             ; turn bit 1 (move abs) on for absolute cursor move
     mov     [vbe_info.control_flag], ax
 
+    mov     ax, [vbe_info.control_flag]
+    or      ax, 16            ; background write on
+    mov     [vbe_info.control_flag], ax
+
     mov     edi, 20
     mov     esi, 2
     call    vbe_move_cursor
@@ -53,7 +54,7 @@ protected32_entry:
     call    draw_string
     mov     edi, msg_testabc
     call    draw_string
-    mov     edi, msg_test_msg
+    mov     edi, msg_esc_seq_test
     call    draw_string
 
     mov     edi, 10
@@ -65,15 +66,66 @@ protected32_entry:
     mov     esi, 1
     mov     edx, 'b'
     call    draw_char
+;----------------------------------------------------------
+    mov     edi, 0x4
+    call    terminal_clear_screen
+
+    mov     edi, 'a'
+    mov     esi, 0xF
+    mov     edx, 0x0
+    call    terminal_print_char32
+    
+    mov     edi, msg_test_scroll
+    mov     esi, 0x0
+    mov     edx, 0xF
+    call    terminal_print_string32
+
+    mov     edi, 40
+    mov     esi, 50
+    call    terminal_move_cursor
+
+    mov     edi, msg_esc_seq_test
+    mov     esi, 0x0
+    mov     edx, 0xF
+    call    terminal_print_string32
+
+    mov     edi, msg_test_scroll
+    mov     esi, 0x0
+    mov     edx, 0xF
+    call    terminal_print_string32
+
+    mov     edi, msg_test_scroll
+    mov     esi, 0x0
+    mov     edx, 0xF
+    call    terminal_print_string32
+
+    mov     edi, msg_test_scroll
+    mov     esi, 0x0
+    mov     edx, 0xF
+    call    terminal_print_string32
+
+    mov     edi, msg_test_scroll
+    mov     esi, 0x0
+    mov     edx, 0xF
+    call    terminal_print_string32
+
+    mov     edi, msg_test_scroll
+    mov     esi, 0x0
+    mov     edx, 0xF
+    call    terminal_print_string32
+
+    mov     edi, msg_test_scroll
+    mov     esi, 0x0
+    mov     edx, 0xF
+    call    terminal_print_string32
 
     jmp     stop
-
+    ; ---------------------------------------
     call    deconstruct_bios_cursor
     call    disable_cursor
-    call    enable_cursor
     
     xor     eax, eax            ; normal mode
-    call    move_cursor         ; move cursor to 0,0
+    call    vga_move_cursor     ; move cursor to 0,0
     xor     edi, edi
     mov     ax, ((BG_GREEN | FG_RED) << 8) | 'B'
     call    vga_print_char32
@@ -82,14 +134,14 @@ protected32_entry:
     mov     edi, msg_welcome32 
     call    vga_print_string32 
 
-    mov     al, [VGA_flags]     ; setting mode
+    mov     al, [vga_control_flag]     ; setting mode
     and     al, 11111000b       ; wiping lower bit
     or      al, 110b            ; merge bits
-    mov     [VGA_flags], al
+    mov     [vga_control_flag], al
     
     xor     eax, eax
     mov     al, 24
-    call    move_cursor         ; move to row 24, col 0
+    call    vga_move_cursor     ; move to row 24, col 0
 
     xor     ah, ah              ; defualt color
     mov     edi, msg_test_wrap
@@ -103,7 +155,35 @@ protected32_entry:
     xor     ah, ah
     mov     edi, msg_test_scroll
     call    vga_print_string32
-        
+
+    mov     edi, msg_test_scroll
+    mov     esi, 0x0
+    mov     edx, 0xF
+    call    terminal_print_string32
+    ; -------------------------------------       
+
+    mov     edi, 0x4
+    call    terminal_clear_screen
+
+    mov     edi, 'a'
+    mov     esi, 0xF
+    mov     edx, 0x0
+    call    terminal_print_char32
+
+    mov     edi, msg_test_scroll
+    mov     esi, 0x0
+    mov     edx, 0xF
+    call    terminal_print_string32
+    ; ------------------------------------
+    xor     ah, ah
+    mov     edi, msg_test_scroll
+    call    vga_print_string32
+
+    xor     ah, ah
+    mov     edi, msg_test_scroll
+    call    vga_print_string32
+
+    
     jmp     stop
 
 
@@ -120,10 +200,11 @@ msg_test_scroll     db      "111111111111111111111111111111111111111111111111111
                     db      "44444444444444444444444444444444444444444444444444444444444444444444444444444444"
                     db      "44444444444444444444444444444444444444444444444444444444444444444444444444444444"
                     db      "44444444444444444444444444444444444444444444444444444444444444444444444444444444", 13, 10, 0
-msg_esc_seq_test    db      "\heyre\\sponsive?\\holycow\a4a\a6\b2haha", 13, 10, 0
+msg_esc_seq_test    db      "\hey\\\a1sponsive?\\holycow\a2a\a4\b6haha", 13, 10, 0
 msg_test            db      "hello", 0
 msg_testabc         db      "abcdefhijklmnopqrstuvwxyz1234567890()*%?<>|", 13, 10, 0
 msg_test_msg        db      "What sup man this is most likely some of the ugliest font you seen ever", 0
 
 %include "src/boot/stage2/32bits/helper/vga_driver.asm"
 %include "src/boot/stage2/32bits/helper/graphic_driver.asm"
+%include "src/boot/stage2/32bits/helper/terminal_interface.asm"

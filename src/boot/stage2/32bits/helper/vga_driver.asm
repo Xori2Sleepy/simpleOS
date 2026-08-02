@@ -26,6 +26,7 @@ deconstruct_bios_cursor:
 vga_clear_screen:
     ; purpose: clear the screen
     ; input: ah <- color
+    ; clobbered: eflag
     push    edi
     push    ecx
     push    ax
@@ -77,7 +78,7 @@ vga_position_translate:
     pop     ecx
     ret
 
-move_cursor:
+vga_move_cursor:
     ; purpose: well, its move cursor, what more there is to say...
     ;        : edit: it still move cursor, but with more swag :)
     ;        : edit: I take it back, it more like 'more nightmare'
@@ -152,15 +153,15 @@ enable_cursor:
     ret
 
 enable_escape_sequence:
-    mov     al, [VGA_flags]     ; setting mode
+    mov     al, [vga_control_flag]     ; setting mode
     and     al, 11111011b       ; wiping esc seq bit
     or      al, 00000100b       ; merge bits
-    mov     [VGA_flags], al
+    mov     [vga_control_flag], al
 
 disable_escape_sequence:
-    mov     al, [VGA_flags]     ; setting mode
+    mov     al, [vga_control_flag]     ; setting mode
     and     al, 11111011b       ; wiping esc seq bit
-    mov     [VGA_flags], al
+    mov     [vga_control_flag], al
 
 vga_grid_normalization:
     ; I KNOW I KNOW THIS CODE IS HORRIBLE BUT I DONT GOT NO TIME TO WORK ON THIS!
@@ -169,7 +170,7 @@ vga_grid_normalization:
     ; output: al = row, ah = col ; but normalized! (why am i writing a comment inside a comment???)
     ;     : edi mode select - 00 (wrap top) 01 (wrap top clear) 10 (scroll wrap) 11 (scroll wrap buffer history)
     ; every 80 colums become one row
-    mov     bl, [VGA_flags]
+    mov     bl, [vga_control_flag]
     and     bl, 00000011b  ; only the first 2 bit respond to normalization mode
 
     .normalize_col:
@@ -252,6 +253,7 @@ vga_print_char32:
     ; clobbered: NA
     ; note: ((BG | FG ) << 8 ) | char   should be your format for ax
     ;     : for simplicity this thing only write! no incrimental features!
+    ;     : edi = 0 = relativwe
     push    edi
     push    ax
     push    dx
@@ -298,7 +300,7 @@ vga_print_string32:
     cld
     mov     esi, edi    ; esi is used by lodsb
 
-    mov     bl, [VGA_flags]
+    mov     bl, [vga_control_flag]
     shr     bl, 2      ; now 3rd bit is the LSB
     and     bl, 1      ; isolate third
 
@@ -337,9 +339,9 @@ vga_print_string32:
 
 
     mov     eax, -1             ; it basically just 0xFFFFFFFF
-    xor     al, al              ; this is preparing confusing argument for move_cursor...
+    xor     al, al              ; this is preparing confusing argument for vga_move_cursor...
     mov     ah, 1
-    call    move_cursor
+    call    vga_move_cursor
 
     pop     edi
     pop     esi
@@ -368,7 +370,7 @@ vga_print_string32:
     mov     eax, -1
     xor     al, al
     mov     ah, 1
-    call    move_cursor
+    call    vga_move_cursor
     pop     esi
     pop     dx
 
@@ -378,7 +380,7 @@ vga_print_string32:
     .bg_color:
     mov     cl, byte [esi+1]
     mov     al, cl
-    call    convert_ascii2int   ; int in ax
+    call    vga_convert_ascii2int   ; int in ax
     shl     ax, 4               ; shift 4 bit (mul 16) 
     and     dh, 0x0F            ; clear upper bit of ah, atp only upper 4 bits exist in cl
     or      dh, al              ; merge them
@@ -388,7 +390,7 @@ vga_print_string32:
     .fg_color:
     mov     cl, byte [esi+1]
     mov     al, cl
-    call    convert_ascii2int
+    call    vga_convert_ascii2int
     and     dh, 0xF0           ; clear lower bits
     or      dh, al             ; merge higher ah and lower cl 
     add     esi, 2
@@ -398,21 +400,21 @@ vga_print_string32:
     mov     eax, -1
     mov     al, 1
     xor     ah, ah
-    call    move_cursor
+    call    vga_move_cursor
     jmp     .loop
     
     .carriage_return:
     xor     eax, eax            ; absolute mode
     mov     al, [current_row] 
     mov     ah, 0
-    call    move_cursor         ; current row, col = 0
+    call    vga_move_cursor         ; current row, col = 0
     jmp     .loop
 
     .done: 
     popf
     ret
 
-convert_ascii2int:
+vga_convert_ascii2int:
     ; purpose: convert ascii (0 to 9 & a to z & A to Z) to raw integer based on hex
     ; input: al <- ASCII
     ; output: al
@@ -439,7 +441,7 @@ col_limit           equ     79
 
 current_row         db      0x00000
 current_col         db      0x00000
-VGA_flags           db      0
+vga_control_flag           db      0
 
 ; Foreground Colors
 FG_BLACK            equ     0x00

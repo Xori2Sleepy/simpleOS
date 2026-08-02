@@ -94,16 +94,15 @@ disk_trial_counter      db      4
 ; --------------------  boot info ------------------------
 align 8
 ; if bit is on that mean something wrong, questionable design eh?
-boot_report:
-    times       3       db      0           ; flag and stuff
+boot_report             dq      0           ; flag and stuff
     ; 0 <- leaf1
     ; 1 <- leaf7
     ; 2 <- xleaf2to4
-    ; 3 <- graphic
+    ; 3 <- graphic                          ; used by terminal_interface to determind printing mode
 
 boot_info:
     .boot_info_size     dq      0
-    .boot_drive         db      0           ; flag for kernel stuff
+    .boot_drive         db      0
     .entry_count        dd      0
 
     .reserved       times 3     db      0   ; for alignment
@@ -218,28 +217,21 @@ vbe_resolution_priority_table:
 selected_priority_rank  dw      0
 selected_mode           dw      0 
 
-; -------------------- VBE information table --------------------
-; uses only at bootloading stage
-vbe_info:
-    ; bits 0 -> write char mode, 1 -> cursor move ; 2 -> normalized mode ; 3 -> esc-seq 
-    .control_flag   dw      0
-    .cursor_row     dd      0
-    .cursor_col     dd      0
-    .bitmap_width   dd      8           ; default
-    .bitmap_height  dd      8           ; default
-    .max_row        dd      0
-    .max_col        dd      0
-    .rem_x          dd      0
-    .rem_y          dd      0
-    .fg_color       dd      0
-    .bg_color       dd      0
-    .fg_color32     dd      0
-    .fg_color24     dd      0
-    .fg_color16     dw      0
-    .fg_color8      db      0
-    .bg_color32     dd      0
-    .bg_color24     dd      0
-    .bg_color16     dw      0
-    .bg_color8      db      0
-    .true_grid_height   dd      0       ; height/width with spacing/margin
-    .true_grid_width    dd      0
+; -------------------- Color information table --------------------
+unify_color:
+    dd      0x00000000    ; 0  Black
+    dd      0x000000AA    ; 1  Blue
+    dd      0x0000AA00    ; 2  Green
+    dd      0x0000AAAA    ; 3  Cyan
+    dd      0x00AA0000    ; 4  Red
+    dd      0x00AA00AA    ; 5  Magenta
+    dd      0x00AA5500    ; 6  Brown
+    dd      0x00AAAAAA    ; 7  Light Gray
+    dd      0x00555555    ; 8  Dark Gray
+    dd      0x005555FF    ; 9  Light Blue
+    dd      0x0055FF55    ; A  Light Green
+    dd      0x0055FFFF    ; B  Light Cyan
+    dd      0x00FF5555    ; C  Light Red
+    dd      0x00FF55FF    ; D  Light Magenta
+    dd      0x00FFFF55    ; E  Yellow
+    dd      0x00FFFFFF    ; F  White

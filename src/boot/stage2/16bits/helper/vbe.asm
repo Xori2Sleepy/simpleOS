@@ -51,7 +51,7 @@ vbe_activate:
     jc      .fallback_vga
     
     mov     al, [boot_report]
-    and     al, 11110111b
+    or      al, 8               ; on = graphic on
     mov     [boot_report], al
 
     ret
@@ -61,7 +61,7 @@ vbe_activate:
     call    print_loop
     
     mov     al, [boot_report]
-    or      al, 00001000b
+    and     al, -9              ; off = graphic off
     mov     [boot_report], al
 
     ret
