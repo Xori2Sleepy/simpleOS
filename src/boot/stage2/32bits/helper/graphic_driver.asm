@@ -348,6 +348,7 @@ vbe_normalized:
     ; input: row in edi ; col in esi ; control bits 2 for mode
     ; output: row in edi ; col in esi
     ; clobbered: 
+    ; note: bit 2 on = clear 
     mov     dx, [vbe_info.control_flag]
     and     dx, 4           ; isolate bits 2 (value 4)
     mov     ecx, [vbe_info.max_row]
@@ -414,5 +415,30 @@ vbe_color_preset_table:
     dd      0x00FF55FF    ; D  Light Magenta
     dd      0x00FFFF55    ; E  Yellow
     dd      0x00FFFFFF    ; F  White
+
+; -------------------- VBE information table --------------------
+; uses only at bootloading stage
+vbe_info:
+    ; bits 0 -> write char mode, 1 -> cursor move ; 2 -> normalized mode ; 3 -> esc-seq 
+    ; bits 4 -> write char background?
+    .control_flag   dw      0
+    .cursor_row     dd      0
+    .cursor_col     dd      0
+    .bitmap_width   dd      8           ; default
+    .bitmap_height  dd      8           ; default
+    .max_row        dd      0
+    .max_col        dd      0
+    .rem_x          dd      0
+    .rem_y          dd      0
+    .fg_color32     dd      0
+    .fg_color24     dd      0
+    .fg_color16     dw      0
+    .fg_color8      db      0
+    .bg_color32     dd      0
+    .bg_color24     dd      0
+    .bg_color16     dw      0
+    .bg_color8      db      0
+    .true_grid_height   dd      0       ; height/width with spacing/margin
+    .true_grid_width    dd      0
 
 %include "src/boot/stage2/32bits/helper/font_table.asm"

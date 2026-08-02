@@ -41,8 +41,8 @@ stage2_entry:
     call    get_bios_cursor     ; need before jumping, make sure no write to buffer after this!
     call    vbe_activate
 
- ;   mov     si, msg_gdt
- ;   call    print_loop
+ ;  mov     si, msg_gdt
+ ;  call    print_loop
 
     ; coming for 32 mode. finally, I have escape the shackle of 16 bits programing!
     cli
