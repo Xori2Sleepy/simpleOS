@@ -69,7 +69,17 @@ protected32_entry:
 ;----------------------------------------------------------
     mov     edi, 0x4
     call    terminal_clear_screen
+
+    mov     edi, 4
+    mov     esi, 50
+ ;   call    terminal_move_cursor
+
+    mov     edi, msg_test_wrap
+    mov     esi, 0x0
+    mov     edx, 0xF
+    call    terminal_print_string32
     jmp     stop
+
     ; ---------------------------------------
     call    deconstruct_bios_cursor
     call    disable_cursor
@@ -124,6 +134,10 @@ protected32_entry:
     mov     esi, 0x0
     mov     edx, 0xF
     call    terminal_print_string32
+
+    mov     edi, 4
+    mov     esi, 50
+    call    terminal_move_cursor
     ; ------------------------------------
     xor     ah, ah
     mov     edi, msg_test_scroll
@@ -133,7 +147,6 @@ protected32_entry:
     mov     edi, msg_test_scroll
     call    vga_print_string32
 
-    
     jmp     stop
 
 

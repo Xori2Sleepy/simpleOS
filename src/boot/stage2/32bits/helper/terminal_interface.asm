@@ -113,6 +113,7 @@ terminal_clear_screen:
     ; output: NA
     ; clobbered: 
     ; note: got lucky here i already have system to translate 1 hex digit color code to vbe color
+    ;     : ALSO THIS THING DOES NOT MOVE CURSOR YOU HAVE TO DO IT YOURSELF
     mov     al, [boot_report]
     and     al, 8               ; isolate 3rd bit
     test    al, al
