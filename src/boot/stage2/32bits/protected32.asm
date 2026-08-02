@@ -70,56 +70,16 @@ protected32_entry:
     mov     edi, 0x4
     call    terminal_clear_screen
 
-    mov     edi, 'a'
-    mov     esi, 0xF
-    mov     edx, 0x0
-    call    terminal_print_char32
-    
-    mov     edi, msg_test_scroll
-    mov     esi, 0x0
-    mov     edx, 0xF
-    call    terminal_print_string32
-
-    mov     edi, 40
+    mov     edi, 4
     mov     esi, 50
-    call    terminal_move_cursor
+ ;   call    terminal_move_cursor
 
-    mov     edi, msg_esc_seq_test
+    mov     edi, msg_test_wrap
     mov     esi, 0x0
     mov     edx, 0xF
     call    terminal_print_string32
-
-    mov     edi, msg_test_scroll
-    mov     esi, 0x0
-    mov     edx, 0xF
-    call    terminal_print_string32
-
-    mov     edi, msg_test_scroll
-    mov     esi, 0x0
-    mov     edx, 0xF
-    call    terminal_print_string32
-
-    mov     edi, msg_test_scroll
-    mov     esi, 0x0
-    mov     edx, 0xF
-    call    terminal_print_string32
-
-    mov     edi, msg_test_scroll
-    mov     esi, 0x0
-    mov     edx, 0xF
-    call    terminal_print_string32
-
-    mov     edi, msg_test_scroll
-    mov     esi, 0x0
-    mov     edx, 0xF
-    call    terminal_print_string32
-
-    mov     edi, msg_test_scroll
-    mov     esi, 0x0
-    mov     edx, 0xF
-    call    terminal_print_string32
-
     jmp     stop
+
     ; ---------------------------------------
     call    deconstruct_bios_cursor
     call    disable_cursor
@@ -174,6 +134,10 @@ protected32_entry:
     mov     esi, 0x0
     mov     edx, 0xF
     call    terminal_print_string32
+
+    mov     edi, 4
+    mov     esi, 50
+    call    terminal_move_cursor
     ; ------------------------------------
     xor     ah, ah
     mov     edi, msg_test_scroll
@@ -183,7 +147,6 @@ protected32_entry:
     mov     edi, msg_test_scroll
     call    vga_print_string32
 
-    
     jmp     stop
 
 

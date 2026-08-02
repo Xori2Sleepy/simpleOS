@@ -213,6 +213,7 @@ vga_grid_normalization:
     mov     ah, 0
 
     jmp     .scroll_wrap
+
     .done:
     ret
 

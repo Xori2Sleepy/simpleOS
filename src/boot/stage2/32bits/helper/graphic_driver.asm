@@ -267,26 +267,23 @@ draw_string:
 vbe_clear_screen:
     ; no input
     ; ecx = width * height * (bpp/8) = total byte to write to buffer
-    xor     eax, eax
-    mov     al, [boot_info.vbe_bpp]
-    shr     al, 3           ; bpp / 8
 
     xor     edi, edi
 
     movzx   eax, word [boot_info.vbe_pitch]
     movzx   edx, word [boot_info.vbe_height]
     imul    eax, edx
-    mov     ecx, eax
+    mov     ecx, eax        ; total byte in ecx
 
     mov     edi, [boot_info.vbe_framebuffer]
     cld                     ; eax, edi, ecx ready
     
-    mov     edx, [boot_info.vbe_bpp]
-    cmp     edx, 32
+    mov     al, [boot_info.vbe_bpp]
+    cmp     al, 32
     je      .clear32
-    cmp     edx, 24
+    cmp     al, 24
     je      .clear24
-    cmp     edx, 16
+    cmp     al, 16
     je      .clear16
 
 .clear32:
@@ -294,7 +291,7 @@ vbe_clear_screen:
     ; calculate left over and how many time to do stosd
     shr     ecx, 2          ; div by 4 to get instance of word size
     cld
-    rep     stosd
+    rep     stosd           ; ecx, eax and edi ready
     ret
 
 .clear24:
@@ -369,13 +366,9 @@ vbe_normalized:
     cmp     dx, 4
     jne     .skip_clear
 
-    push    eax
-    push    ecx
-    push    edx
+    pushad
     call    vbe_clear_screen
-    pop     edx
-    pop     ecx
-    pop     eax
+    popad
 
 .skip_clear:
     sub     edi, ecx
