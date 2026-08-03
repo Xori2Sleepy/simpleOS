@@ -146,6 +146,7 @@ memory_map_sanitation:
     
     ; fuck 16 bits mode, we can only uses eax so we cant compare qword normally
     mov     ax, cx
+.shift_compare_loop:
     lea     ax, [ax + ax * 2]   ; *3
     shl     ax, 3       ; 3 * 8 = 24
     mov     eax, dword [boot_info.memory_map + ax + 4]  ; top bits of base address
@@ -157,7 +158,13 @@ memory_map_sanitation:
     sub     ax, 24
     cmp     eax, dword [boot_info.memory_map + ax]
 .post_compare:
-    jl      .swap_
+    jl      .shift
+
+.shift:
+    mov     si, ax
+    add     ax, 24
+    mov     di, ax
+    call    copy_e820_entry
 
 .e801:
  ;   mov     si, msg_sanitation_e801
