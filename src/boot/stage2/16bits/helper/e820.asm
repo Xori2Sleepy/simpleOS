@@ -15,24 +15,34 @@ detect_memory_e820:
     mov     edx, E820_signature ; it like handshake code? i guess? (SMAP)
     mov     ecx, E820_entry_size; some legacy stuff doesnt support 24 byte, so this tell that we do want it
 
-    mov     dword [es:di+20], 1 ; needed by some bios? legacy reason
+    mov     dword [es:di + 20], 1 ; needed by some bios? legacy reason
 
-    int     0x15                ; write to our pointer
+    int     0x15                ; write to our pointer | DO NOT DESTROY EBX WE NEED IT
     jc      .e820_failed        ; error/no support
 
     cmp     eax, E820_signature ; see if it give gabbage or nah
     jne     .e820_failed        ; if sig is bs, it garbage we are done
 
-    mov     eax, [es:di+8]      ; point to length attribute (length is 8 byte)
-    or      eax, [es:di+12]     ; length + 4. 
+    ; sanitation process, removing bad entires (0)
+    mov     eax, [es:di + 8]    ; point to length attribute (length is 8 byte)
+    or      eax, [es:di + 12]   ; length + 4. 
     jz      .skip               ; basically cmp rdx, 0 on legnth, but we cant uses rdx so we have these
+
+    ; another sanitation process, removing address wrap around ( > 2^64 - 1)
+    ; edx:eax = base
+    mov     eax, [es:di + 0]
+    mov     edx, [es:di + 4]
+    ; edx:eax + length
+    add     eax, [es:di + 8]
+    adc     edx, [es:di + 12]   ; this instruction save my life bro I dint even know this exist
+    jc      .skip               ; this is why we love CISC
 
     inc     dword [boot_info.entry_count]
     add     di, E820_entry_size ; advanacing pointer if all valid
 
 .skip:
     test    ebx, ebx            ; if it return 0 by bios it mean no more entry
-    jnz     .next_entry
+    jnz     .next_entry         ; ACHTUNG ACHTUNG ACHTUNG | BE CAREFUL WITH EBX! I wish i could highlight comment
 
     cmp     dword [boot_info.entry_count], 0
     jz      .e820_failed        ; if we got nothing in map it fail
@@ -113,12 +123,108 @@ detect_memory_e820:
     call    halt
 
 memory_map_sanitation:
+    ; Sorting algorithm in assembly? DEAR GOD
+    ; input: NA
+    ; output: NA
+    ; clobbered: I DONT GIVE A FUCK
     mov     eax, [boot_report]
     and     eax, 16         ; isolate bits 4
     test    eax, eax
     jnz     .e801
 
+    ; INSERTION SORT BEGIN HERE!
+    ; this is to sort memory map return by func e820 of int 0x15
+    xor     edi, edi
+    xor     esi, esi
+    xor     ecx, ecx
+
+    mov     cx, 1          ; pointer to index (start @ second element)
+
+.loop:
+    mov     si, cx          ; index
+    call    copy_e820_to_temp
+    
+    ; fuck 16 bits mode, we can only uses eax so we cant compare qword normally
+    mov     ax, cx
+.shift_compare_loop:
+    lea     ax, [ax + ax * 2]   ; *3
+    shl     ax, 3       ; 3 * 8 = 24
+    mov     eax, dword [boot_info.memory_map + ax + 4]  ; top bits of base address
+    sub     ax, 24      ; element to the left
+    cmp     eax, dword [boot_info.memory_map + ax + 4]
+    jne     .post_compare
+    add     ax, 24
+    mov     eax, dword [boot_info.memory_map + ax]
+    sub     ax, 24
+    cmp     eax, dword [boot_info.memory_map + ax]
+.post_compare:
+    jl      .shift
+
+.shift:
+    mov     si, ax
+    add     ax, 24
+    mov     di, ax
+    call    copy_e820_entry
+
 .e801:
-    mov     si, msg_sanitation_e801
-    call    print_loop
+ ;   mov     si, msg_sanitation_e801
+ ;   call    print_loop
     ret
+
+
+; ---------- HELPER FUNCTION ----------
+copy_e820_entry:
+    ; input: si, di
+    ; ouput: memory mov
+    ; note: this move a 24 byte chuck from si to di and add abstraction
+    ; convert indexes to effective address
+    push    esi
+    push    edi
+    push    ecx
+    lea     si, [si + si * 2]   ; *3
+    shl     si, 3       ; 3 * 8 = 24
+    lea     di, [di + di * 2]   ; *3
+    shl     di, 3       ; 3 * 8 = 24
+    add     si, boot_info.memory_map
+    add     di, boot_info.memory_map
+    mov     ecx, 6      ; double word * 6 = 24 byte
+    rep     movsd
+    pop     ecx
+    pop     edi
+    pop     esi
+    ret
+
+copy_e820_to_temp:
+    ; input: si
+    ; ouput: memory mov 2 scratch pad
+    push    esi
+    push    edi
+    push    ecx
+    lea     si, [si + si * 2]   ; *3
+    shl     si, 3       ; 3 * 8 = 24
+    add     si, boot_info.memory_map
+    add     di, scratchpad
+    mov     ecx, 6      ; double word * 6 = 24 byte
+    rep     movsd
+    pop     ecx
+    pop     edi
+    pop     esi
+    ret
+
+copy_e820_from_temp:
+    ; input: di
+    ; ouput: memory mov 2 scratch pad
+    push    esi
+    push    edi
+    push    ecx
+    lea     di, [di + di * 2]   ; *3
+    shl     di, 3       ; 3 * 8 = 24
+    add     si, scratchpad
+    add     di, boot_info.memory_map
+    mov     ecx, 6      ; double word * 6 = 24 byte
+    rep     movsd
+    pop     ecx
+    pop     edi
+    pop     esi
+    ret
+
