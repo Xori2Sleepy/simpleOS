@@ -53,6 +53,7 @@ draw_char:
     ; clobbered:
     ; note: [ASCII_lookup_table + ascii char #] = pointer to char bit map
     ;     : control bits 0 = on -> absolute move ; off -> relative to cursor
+    ;     : bits 4 -> background color 1 = actiave
 
     ; convert grid offset to pixel offset
     mov     ax, [vbe_info.control_flag]
@@ -89,7 +90,7 @@ draw_char:
     pushad
     ; we need to move edi + ecx to esi and esi + edx to edi, confusing I know!
     mov     ax, word [vbe_info.control_flag]
-    and     ax, 16          ; 4th bits isolated
+    and     ax, 16          ; 4th bits isolated 
     test    ax, ax
     jz      .skip_background
     mov     eax, esi

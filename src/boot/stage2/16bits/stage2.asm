@@ -30,19 +30,14 @@ stage2_entry:
     call    print_loop
     call    detect_memory_e820
 
+
+
     mov     si, msg_attempt_kernel_load
     call    print_loop
     call    kernel_load
-
     mov     si, msg_attempt_header_read
     call    print_loop
     call    kernel_header_read
-
-    call    get_bios_cursor     ; need before jumping, make sure no write to buffer after this!
-    call    vbe_activate
-
- ;  mov     si, msg_gdt
- ;  call    print_loop
 
     ; coming for 32 mode. finally, I have escape the shackle of 16 bits programing!
     cli
@@ -54,12 +49,28 @@ stage2_entry:
     lgdt    [gdt_descriptor]    ; loading gdt to gdtr
     mov     eax, cr0            ; I just discover that I can use 32 bits regs in real mode...
     or      eax, 1              ; turn the first bits of cr0 on (Protection Enable, PE bits)
+    push    eax
 
-   ; mov     si, msg_far_jump    ; print stuff before interupt cant be call!
-   ; call    print_loop
+    call    kernel_analyze_graphic
+    jnc     .graphic_not_requested
 
+.graphic_requested:
+    call    vbe_activate
+    jmp     .jmp32
+
+.graphic_not_requested:
+    mov     si, msg_gdt
+    call    print_loop
+    mov     si, msg_far_jump    ; print stuff before interupt cant be call!
+    call    print_loop
+
+    call    get_bios_cursor     ; need before jumping, make sure no write to buffer after this!
+                                ; used scratch pad SO BE CAREFUL
+    jmp     .jmp32
+
+.jmp32:
+    pop     eax
     mov     cr0, eax            ; protected mode officially on
-
     jmp     kernelcode_32bits_descriptor:protected32_entry
 
 ; ---------- functions ---------- 

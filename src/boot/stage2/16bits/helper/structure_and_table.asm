@@ -69,17 +69,28 @@ kernel_magic            equ     "QADB"
 
 kernel_info:
     .magic              dd      0
-    .version            dw      0
+    .header_version     dd      0           ; first 8 - other flag, next 8 - patch , next 8 minor ; last 8 major
     .header_size        dw      0
+
+    .kernel_version     dw      0           ; kernel version
+    .kernel_name        dd      0
     .image_size         dd      0
+    .check_sum          dd      0
+
+    .load_address       dd      0
+    .alignment          dd      0
     .entry32            dd      0           ; off set from image start
     .entry64            dd      0
+
     .required_cpu       dd      0           ; cpuid id shit
-    .flags              dd      0           ; protected; graphic; paging; long_mode
+    .flags              dd      0
+    ; flag: 0 vbe_graphic ; 1 paging ; 2 long mode ; 3 frame buffer require ; 4 check sum ; 
+    ; flag: 5 higher half ; 6 identity map ; 7 flag strict
+
     .minimum_memory     dq      0
-    .preferred_bpp      db      0           ; order is important,
-    .preferred_width    dw      0           ; the vbe logic read bpp width and height as a single chunck
-    .preferred_height   dw      0
+    .preferred_bpp      dd      0           ; order is important,
+    .preferred_width    dd      0           ; the vbe logic read bpp width and height as a single chunck
+    .preferred_height   dd      0
 
 kernel_dap:                    
     .dap_size           db      0x10        ; size
@@ -94,16 +105,18 @@ disk_trial_counter      db      4
 ; --------------------  boot info ------------------------
 align 8
 ; if bit is on that mean something wrong, questionable design eh?
+; edit: I CHANGED IT, NOW IF BIT OFF = we dint/couldnt activate or obtain it
 boot_report             dq      0           ; flag and stuff
     ; 0 <- leaf1
     ; 1 <- leaf7
     ; 2 <- xleaf2to4
     ; 3 <- graphic                          ; used by terminal_interface to determind printing mode
+    ; 4 <- e801
 
 boot_info:
-    .boot_info_size     dq      0
+    .boot_info_size     dq      0           ; fill later
     .boot_drive         db      0
-    .entry_count        dd      0
+    .entry_count        dd      0           ; for memory map
 
     .reserved       times 3     db      0   ; for alignment
 
@@ -146,8 +159,6 @@ boot_info:
 
     .vendor_name    times 3     dd      0
     .brand_string   times 48    db      0
-
-    .e801_status        db      0
 
     align 8
     .memory_map     times 64 * 24       db      0
@@ -207,7 +218,7 @@ CPUID_VENDOR_BUFFER:
 ; -------------------- VBE Priority table --------------------
 vbe_resolution_priority_table:
     .entries_count      db          6
-    resolution_entries  32, 1920, 1080            ; place holder that will be populate by kernel header code
+    resolution_entries  0, 0, 0            ; place holder that will be populate by kernel header code
     resolution_entries  32, 1920, 1080
     resolution_entries  32, 1600, 900
     resolution_entries  32, 1280, 720
