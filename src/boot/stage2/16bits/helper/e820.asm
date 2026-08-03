@@ -101,7 +101,10 @@ detect_memory_e820:
     jz      .e801_failed
     mov     si, msg_e801_success
     call    print_loop
-    mov     [boot_info.e801_status], 1      ; tell kernel to be careful!
+
+    mov     eax, dword [boot_info]     ; tell kernel to be careful!
+    or      eax, 16
+    mov     dword [boot_info], eax
     ret
 
 .e801_failed:
@@ -109,3 +112,13 @@ detect_memory_e820:
     call    print_loop
     call    halt
 
+memory_map_sanitation:
+    mov     eax, [boot_report]
+    and     eax, 16         ; isolate bits 4
+    test    eax, eax
+    jnz     .e801
+
+.e801:
+    mov     si, msg_sanitation_e801
+    call    print_loop
+    ret

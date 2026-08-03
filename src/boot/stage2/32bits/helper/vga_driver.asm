@@ -430,11 +430,6 @@ vga_convert_ascii2int:
     sub     al, 0x30
     ret
 
-stop:
-    ; function for debugging 
-.loop:
-    jmp     .loop
-
 
 VGA_buffer_base     equ     0xb8000
 row_limit           equ     24

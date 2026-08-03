@@ -141,15 +141,14 @@ vbe_4f01:
 
     push    es
     push    di
-        
-    mov     ax, [vbe_resolution_priority_table.entries_count]        ; start at dead last
+    
+    xor     eax, eax
+    mov     al, [vbe_resolution_priority_table.entries_count]        ; start at dead last
     mov     cx, ax
     shl     ax, 2
     add     ax, cx                              ; this ensure our selected rank is alway beyond the lowest in table
     mov     [selected_priority_rank], ax
     
-
-
     ; es:di mode list pointer
     mov     ax, [boot_info.vbe_video_mode_ptr + 2]
     mov     es, ax                              ; move to ax first beacuse it weird hardware stuff, cache thing ig?
@@ -170,7 +169,8 @@ vbe_4f01:
     jc      .mode_number_next
 
     ; start from lowest priority
-    mov     bx, [vbe_resolution_priority_table.entries_count]
+    xor     ebx, ebx
+    mov     bl, [vbe_resolution_priority_table.entries_count]
     dec     bx                                  ; minus one because we counting backward
     mov     cx, bx
     shl     bx, 2
@@ -211,8 +211,9 @@ vbe_4f01:
     jmp     .mode_number_loop
 
 .done_search:
+    xor     ebx, ebx
     mov     ax, [selected_priority_rank]
-    mov     bx, [vbe_resolution_priority_table.entries_count]
+    mov     bl, [vbe_resolution_priority_table.entries_count]
     mov     cx, bx
     shl     bx, 2
     add     bx, cx

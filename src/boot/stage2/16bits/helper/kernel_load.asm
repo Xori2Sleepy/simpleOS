@@ -85,18 +85,24 @@ disk_error:
 
 ; -------------------- header read -------------------- 
 kernel_header_read:
-    mov     edi, [kernel_dap.destination]   ; magic is loaded
-    mov     eax, [edi]
+    ; this assume magic, header ver, and header size is alway consistent across version
+    mov     di, [kernel_dap.destination]   ; magic is loaded
+    mov     eax, dword [di]
     cmp     eax, kernel_magic
     jne     .unrecognized_header
 
     mov     si, msg_recognized_magic
     call    print_loop
     
-    mov     edi, kernel_info
-    mov     esi, [kernel_dap.destination]
     xor     ecx, ecx
-    mov     ecx, [kernel_dap.destination + 6] ; header size
+    xor     esi, esi
+    xor     edi, edi
+    mov     si, [kernel_dap.destination]   ; scratch pad
+    mov     cx, word [si + 8]; header size
+
+    mov     si, word [kernel_dap.destination]   ; scratch pad
+    mov     di, kernel_info
+
     cld 
     rep     movsb
     ret
@@ -105,4 +111,24 @@ kernel_header_read:
     mov     si, msg_unrecognized_magic
     call    print_loop
     call    halt        ; fatal error
+    ret
+; -------------------- header analysis -------------------- 
+kernel_analyze_graphic:
+    ; input: NA
+    ; output: carry (on = request graphic, off = no request for graphic)
+    ; clobbered: eflags ; eax
+    mov     eax, [kernel_info.header_version] ; version 
+    shr     eax, 24     ; checking major version
+    test    eax, eax    ; unreleased major 0
+    je      .major0
+.major0:
+    mov     eax, [kernel_info.flags]
+    and     eax, 1      ; isolate bits 0 : graphic
+    test    eax, eax
+    je      .m0_gOFF
+.m0_gON:
+    stc
+    ret
+.m0_gOFF:
+    clc
     ret

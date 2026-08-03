@@ -1,9 +1,31 @@
 [bits 32]
+terminal_initialize:
+    ; hard coded function to prepare some random stuff
+
+    mov     al, [boot_report]
+    and     al, 8               ; isolate 3rd bit
+    test    al, al
+    jz      .vga
+
+.vbe:
+    mov     edi, 8
+    mov     esi, 8
+    mov     edx, 3
+    mov     ecx, 5
+    call    calculate_grid_data
+    mov     dword [vbe_info.fg_color32], 0x00FFFFFF
+    mov     dword [vbe_info.bg_color32], 0x00000000
+    ret
+
+.vga:
+    call    deconstruct_bios_cursor
+    call    disable_cursor
+    ret
 
 terminal_print_char32:
     ; input: char in edi ; bg color in esi (0 - f) ; fg color in edx
     mov     al, [boot_report]
-    and     al, 8               ; isolate 3rd bit
+    and     al, 8           ; isolate 3rd bit
     test    al, al
     jz      .vga
 
@@ -11,7 +33,8 @@ terminal_print_char32:
     ; no color saving stuff yet idk if i should implement or not
     mov     ax, word [vbe_info.control_flag]
     push    eax
-    and     ax, -2          ; 0 for control
+    and     ax, -2          ; bits 0 is off for relative
+    or      ax, 16          ; turn bits 4 on for bg_color print
     mov     [vbe_info.control_flag], ax
 
     mov     eax, dword [vbe_info.bg_color32]
@@ -61,7 +84,7 @@ terminal_print_string32:
     ; make sure we enable clear screen top wrap as default graphic behavior
     mov     ax, [vbe_info.control_flag]
     push    eax                     ; bits 3 for esc seq (on = on) and bits 2 on for wrap top clear
-    or      ax, 12                  ; turn bits 2 and 3 on
+    or      ax, 28                  ; turn bits 2 3 and 4 on (inc mov, esc seq act, and bg_color act)
     mov     [vbe_info.control_flag], ax
 
     mov     eax, dword [vbe_info.bg_color32]
