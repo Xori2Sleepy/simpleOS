@@ -126,7 +126,7 @@ memory_map_sanitation:
     ; Sorting algorithm in assembly? DEAR GOD
     ; input: NA
     ; output: NA
-    ; clobbered: I DONT GIVE A FUCK
+    ; clobbered: You ask MEE???
     mov     eax, [boot_report]
     and     eax, 16         ; isolate bits 4
     test    eax, eax
@@ -141,30 +141,44 @@ memory_map_sanitation:
     mov     cx, 1          ; pointer to index (start @ second element)
 
 .loop:
-    mov     si, cx          ; index
+    mov     ax, [boot_info.entry_count]
+    dec     ax
+    cmp     cx, ax
+    je      .done_sort      
+
+    mov     di, cx          ; index
     call    copy_e820_to_temp
     
-    ; fuck 16 bits mode, we can only uses eax so we cant compare qword normally
     mov     ax, cx
+
 .shift_compare_loop:
-    lea     ax, [ax + ax * 2]   ; *3
-    shl     ax, 3       ; 3 * 8 = 24
-    mov     eax, dword [boot_info.memory_map + ax + 4]  ; top bits of base address
-    sub     ax, 24      ; element to the left
-    cmp     eax, dword [boot_info.memory_map + ax + 4]
-    jne     .post_compare
-    add     ax, 24
-    mov     eax, dword [boot_info.memory_map + ax]
-    sub     ax, 24
-    cmp     eax, dword [boot_info.memory_map + ax]
-.post_compare:
-    jl      .shift
+    ; compare current with left
+    cmp     ax, ax
+    jz      .done_shift
+
+    mov     di, ax
+    push    eax
+    call    compare_e820_left_index_less_than   ; perserve all register
+    pop     eax                 ; just defensive programing
+    jc      .shift              ; carry = current is less than
+
+.done_shift:
+    mov     di, ax              ; copy to what ever ax is
+    call    copy_e820_from_temp
+    inc     cx                  ; move on to next index
+    jmp     .loop               ; current index 0, we shift everything already
 
 .shift:
-    mov     si, ax
-    add     ax, 24
     mov     di, ax
-    call    copy_e820_entry
+    dec     ax                  ; i heard sub is more efficient but it virtually no different in modern system
+    mov     si, ax
+    push    ax
+    call    copy_e820_entry     ; copying left to current index
+    pop     ax                  ; index here still have dec from before call
+    jmp     .shift_compare_loop
+
+.done_sort:
+
 
 .e801:
  ;   mov     si, msg_sanitation_e801
@@ -173,6 +187,33 @@ memory_map_sanitation:
 
 
 ; ---------- HELPER FUNCTION ----------
+compare_e820_left_index_less_than:
+    ; fuck 16 bits mode, we can only uses eax so we cant compare qword normally
+    push    edi
+    push    eax
+    ; input: current index in edi
+    mov     ax, di
+    ; compare current with left
+    mov     edi, dword [boot_info.memory_map + ax + 4]  ; top bits of base address
+    sub     ax, 24      ; element to the left
+    cmp     ebx, dword [boot_info.memory_map + ax + 4]
+    jne     .compare
+    add     ax, 24
+    mov     edi, dword [boot_info.memory_map + ax]
+    sub     ax, 24
+    cmp     edi, dword [boot_info.memory_map + ax]      ; pointer to left of current index position now
+.compare:
+    jl      .less_than
+    pop     eax
+    pop     edi
+    clc
+    ret
+.less_than
+    pop     eax
+    pop     edi
+    stc
+    ret
+
 copy_e820_entry:
     ; input: si, di
     ; ouput: memory mov
@@ -195,11 +236,12 @@ copy_e820_entry:
     ret
 
 copy_e820_to_temp:
-    ; input: si
+    ; input: di
     ; ouput: memory mov 2 scratch pad
     push    esi
     push    edi
     push    ecx
+    mov     si, di
     lea     si, [si + si * 2]   ; *3
     shl     si, 3       ; 3 * 8 = 24
     add     si, boot_info.memory_map
