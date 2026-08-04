@@ -124,9 +124,10 @@ detect_memory_e820:
 
 memory_map_sanitation:
     ; Sorting algorithm in assembly? DEAR GOD
+    ; Optimization is not a thing here, prirority is the perserve my sanity
     ; input: NA
     ; output: NA
-    ; clobbered: You ask MEE???
+    ; clobbered: just assume it perserve none of the general regs and eflag
     mov     eax, [boot_report]
     and     eax, 16         ; isolate bits 4
     test    eax, eax
@@ -142,29 +143,28 @@ memory_map_sanitation:
 
 .loop:
     mov     ax, [boot_info.entry_count]
-    dec     ax
     cmp     cx, ax
-    je      .done_sort      
+    je      .done_sort
 
-    mov     di, cx          ; index
-    call    copy_e820_to_temp
+    mov     di, cx
+    call    copy_map_to_temp
     
     mov     ax, cx
 
 .shift_compare_loop:
     ; compare current with left
-    cmp     ax, ax
+    test    ax, ax
     jz      .done_shift
 
     mov     di, ax
     push    eax
-    call    compare_e820_left_index_less_than   ; perserve all register
+    call    compare_map_left_index_less_than   ; function perserve all register
     pop     eax                 ; just defensive programing
     jc      .shift              ; carry = current is less than
 
 .done_shift:
     mov     di, ax              ; copy to what ever ax is
-    call    copy_e820_from_temp
+    call    copy_map_from_temp
     inc     cx                  ; move on to next index
     jmp     .loop               ; current index 0, we shift everything already
 
@@ -173,12 +173,14 @@ memory_map_sanitation:
     dec     ax                  ; i heard sub is more efficient but it virtually no different in modern system
     mov     si, ax
     push    ax
-    call    copy_e820_entry     ; copying left to current index
-    pop     ax                  ; index here still have dec from before call
+    call    copy_map_entry     ; copying left to current index
+    pop     ax                 ; index here still have dec from before call
     jmp     .shift_compare_loop
 
 .done_sort:
-
+ ;   mov     si, msg_sanitation_success
+ ;   call    print_loop
+    ret
 
 .e801:
  ;   mov     si, msg_sanitation_e801
@@ -187,34 +189,40 @@ memory_map_sanitation:
 
 
 ; ---------- HELPER FUNCTION ----------
-compare_e820_left_index_less_than:
+compare_map_left_index_less_than:
     ; fuck 16 bits mode, we can only uses eax so we cant compare qword normally
     push    edi
     push    eax
     ; input: current index in edi
     mov     ax, di
+    shl     di, 1
+    add     di, ax      ; * 3
+    shl     di, 3       ; 3 * 8 = 24
+
+    xor     eax, eax
+    mov     ax, di
     ; compare current with left
-    mov     edi, dword [boot_info.memory_map + ax + 4]  ; top bits of base address
-    sub     ax, 24      ; element to the left
-    cmp     ebx, dword [boot_info.memory_map + ax + 4]
+    mov     edi, dword [boot_info.memory_map + eax + 4]  ; top bits of base address
+    sub     eax, 24      ; element to the left
+    cmp     ebx, dword [boot_info.memory_map + eax + 4]
     jne     .compare
-    add     ax, 24
-    mov     edi, dword [boot_info.memory_map + ax]
-    sub     ax, 24
-    cmp     edi, dword [boot_info.memory_map + ax]      ; pointer to left of current index position now
+    add     eax, 24
+    mov     edi, dword [boot_info.memory_map + eax]
+    sub     eax, 24
+    cmp     edi, dword [boot_info.memory_map + eax]      ; pointer to left of current index position now
 .compare:
     jl      .less_than
     pop     eax
     pop     edi
     clc
     ret
-.less_than
+.less_than:
     pop     eax
     pop     edi
     stc
     ret
 
-copy_e820_entry:
+copy_map_entry:
     ; input: si, di
     ; ouput: memory mov
     ; note: this move a 24 byte chuck from si to di and add abstraction
@@ -222,49 +230,71 @@ copy_e820_entry:
     push    esi
     push    edi
     push    ecx
-    lea     si, [si + si * 2]   ; *3
+    push    eax
+
+    mov     ax, si
+    shl     si, 1
+    add     si, ax      ; *3
     shl     si, 3       ; 3 * 8 = 24
-    lea     di, [di + di * 2]   ; *3
+    mov     ax, di
+    shl     di, 1
+    add     di, ax      ; *3
     shl     di, 3       ; 3 * 8 = 24
+
     add     si, boot_info.memory_map
     add     di, boot_info.memory_map
     mov     ecx, 6      ; double word * 6 = 24 byte
     rep     movsd
+
+    pop     eax
     pop     ecx
     pop     edi
     pop     esi
     ret
 
-copy_e820_to_temp:
+copy_map_to_temp:
     ; input: di
     ; ouput: memory mov 2 scratch pad
     push    esi
     push    edi
     push    ecx
+    push    eax
+        
     mov     si, di
-    lea     si, [si + si * 2]   ; *3
+
+    mov     ax, si
+    shl     si, 1
+    add     si, ax
     shl     si, 3       ; 3 * 8 = 24
     add     si, boot_info.memory_map
     add     di, scratchpad
     mov     ecx, 6      ; double word * 6 = 24 byte
     rep     movsd
+
+    pop     eax
     pop     ecx
     pop     edi
     pop     esi
     ret
 
-copy_e820_from_temp:
+copy_map_from_temp:
     ; input: di
     ; ouput: memory mov 2 scratch pad
     push    esi
     push    edi
     push    ecx
-    lea     di, [di + di * 2]   ; *3
+    push    eax
+    
+    mov     ax, di
+    shl     di, 1
+    add     di, ax
     shl     di, 3       ; 3 * 8 = 24
     add     si, scratchpad
     add     di, boot_info.memory_map
     mov     ecx, 6      ; double word * 6 = 24 byte
     rep     movsd
+
+    pop     eax
     pop     ecx
     pop     edi
     pop     esi
