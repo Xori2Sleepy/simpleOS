@@ -178,7 +178,7 @@ memory_map_sanitation:
     jmp     .shift_compare_loop
 
 .done_sort:
-
+       
 
 .e801:
  ;   mov     si, msg_sanitation_e801
