@@ -195,22 +195,28 @@ compare_map_left_index_less_than:
     push    eax
     ; input: current index in edi
     mov     ax, di
+    shl     di, 1
+    add     di, ax      ; * 3
+    shl     di, 3       ; 3 * 8 = 24
+
+    xor     eax, eax
+    mov     ax, di
     ; compare current with left
-    mov     edi, dword [boot_info.memory_map + ax + 4]  ; top bits of base address
-    sub     ax, 24      ; element to the left
-    cmp     ebx, dword [boot_info.memory_map + ax + 4]
+    mov     edi, dword [boot_info.memory_map + eax + 4]  ; top bits of base address
+    sub     eax, 24      ; element to the left
+    cmp     ebx, dword [boot_info.memory_map + eax + 4]
     jne     .compare
-    add     ax, 24
-    mov     edi, dword [boot_info.memory_map + ax]
-    sub     ax, 24
-    cmp     edi, dword [boot_info.memory_map + ax]      ; pointer to left of current index position now
+    add     eax, 24
+    mov     edi, dword [boot_info.memory_map + eax]
+    sub     eax, 24
+    cmp     edi, dword [boot_info.memory_map + eax]      ; pointer to left of current index position now
 .compare:
     jl      .less_than
     pop     eax
     pop     edi
     clc
     ret
-.less_than
+.less_than:
     pop     eax
     pop     edi
     stc
@@ -224,14 +230,23 @@ copy_map_entry:
     push    esi
     push    edi
     push    ecx
-    lea     si, [si + si * 2]   ; *3
+    push    eax
+
+    mov     ax, si
+    shl     si, 1
+    add     si, ax      ; *3
     shl     si, 3       ; 3 * 8 = 24
-    lea     di, [di + di * 2]   ; *3
+    mov     ax, di
+    shl     di, 1
+    add     di, ax      ; *3
     shl     di, 3       ; 3 * 8 = 24
+
     add     si, boot_info.memory_map
     add     di, boot_info.memory_map
     mov     ecx, 6      ; double word * 6 = 24 byte
     rep     movsd
+
+    pop     eax
     pop     ecx
     pop     edi
     pop     esi
@@ -243,13 +258,20 @@ copy_map_to_temp:
     push    esi
     push    edi
     push    ecx
+    push    eax
+        
     mov     si, di
-    lea     si, [si + si * 2]   ; *3
+
+    mov     ax, si
+    shl     si, 1
+    add     si, ax
     shl     si, 3       ; 3 * 8 = 24
     add     si, boot_info.memory_map
     add     di, scratchpad
     mov     ecx, 6      ; double word * 6 = 24 byte
     rep     movsd
+
+    pop     eax
     pop     ecx
     pop     edi
     pop     esi
@@ -261,12 +283,18 @@ copy_map_from_temp:
     push    esi
     push    edi
     push    ecx
-    lea     di, [di + di * 2]   ; *3
+    push    eax
+    
+    mov     ax, di
+    shl     di, 1
+    add     di, ax
     shl     di, 3       ; 3 * 8 = 24
     add     si, scratchpad
     add     di, boot_info.memory_map
     mov     ecx, 6      ; double word * 6 = 24 byte
     rep     movsd
+
+    pop     eax
     pop     ecx
     pop     edi
     pop     esi
