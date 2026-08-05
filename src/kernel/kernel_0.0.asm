@@ -16,7 +16,7 @@ kernel_header:
     .entry64            dd      0
 
     .required_cpu       dd      0
-    .flags              dd      0x1
+    .flags              dd      0x0
     ; flag: 0 vbe_graphic ; 1 paging ; 2 long mode ; 3 frame buffer require ; 4 check sum ; 
     ; flag: 5 higher half ; 6 identity map ; 7 flag strict
     .minimum_memory     dq      0
