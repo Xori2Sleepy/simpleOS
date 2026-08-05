@@ -123,6 +123,63 @@ detect_memory_e820:
     call    halt
 
 memory_map_sanitation:
+    call    memory_map_sort
+    jc      .not_sort
+    call    memory_map_merge
+.not_sort:
+    ret
+
+memory_map_merge:
+    xor     ecx, ecx        ; counter for looping
+    mov     edx, [boot_info.entry_count]
+    dec     edx
+
+.merge_loop:
+    cmp     ecx, edx
+    jge     .done
+
+    push    edx
+    push    ecx
+
+    mov     ax, cx
+    shl     cx, 1
+    add     cx, ax
+    shl     cx, 3       ; cx to offset
+    mov     eax, [boot_info.memory_map + ecx]       ; lower half base
+    add     eax, dword [boot_info.memory_map + ecx + 8]     ; add lower length
+    mov     edx, [boot_info.memory_map + ecx + 4]   ; higher half base
+    adc     edx, dword [boot_info.memory_map + ecx + 12]    ; higher half length
+    cmp     eax, dword [boot_info.memory_map + ecx + 24]    ; compare to lower base address of next
+    jne     .not_equal
+    cmp     edx, dword [boot_info.memory_map + ecx + 28]    ; compare to upper base address of next
+    jne     .not_equal
+.equal:
+    ; after basic address check, compare type and extended attribute
+    mov     eax, [boot_info.memory_map + ecx + 16]  ; it 4 byte long
+    cmp     eax, [boot_info.memory_map + ecx + 40]  ; compare type
+    jne     .not_equal
+    mov     eax, [boot_info.memory_map + ecx + 20]
+    cmp     eax, [boot_info.memory_map + ecx + 44]  ; compare extended attribute
+    jne     .not_equal
+    pop     ecx     ; now it index instead of offset
+    mov     edi, ecx
+    call    merge_adjacent_map_entry     ; if equal merge adjacent and shift entire buffer
+    pop     edx     ; we dont incriment here because incase 3 adjacent can be merge
+    dec     edx     ; every time it merge length decrease
+    jmp     .merge_loop
+
+.not_equal:
+    pop     ecx
+    pop     edx
+    inc     ecx
+    jmp     .merge_loop
+
+.done:
+    mov     si, msg_map_merge_success
+    call    print_loop
+    ret
+    
+memory_map_sort:
     ; Sorting algorithm in assembly? DEAR GOD
     ; Optimization is not a thing here, prirority is the perserve my sanity
     ; input: NA
@@ -178,13 +235,15 @@ memory_map_sanitation:
     jmp     .shift_compare_loop
 
 .done_sort:
- ;   mov     si, msg_sanitation_success
- ;   call    print_loop
+    mov     si, msg_sanitation_success
+    call    print_loop
+    clc
     ret
 
 .e801:
- ;   mov     si, msg_sanitation_e801
- ;   call    print_loop
+    mov     si, msg_sanitation_e801
+    call    print_loop
+    stc
     ret
 
 
@@ -200,7 +259,7 @@ compare_map_left_index_less_than:
     shl     di, 3       ; 3 * 8 = 24
 
     xor     eax, eax
-    mov     ax, di
+    mov     eax, edi
     ; compare current with left
     mov     edi, dword [boot_info.memory_map + eax + 4]  ; top bits of base address
     sub     eax, 24      ; element to the left
@@ -300,3 +359,49 @@ copy_map_from_temp:
     pop     esi
     ret
 
+merge_adjacent_map_entry:
+    ; input: edi
+    ; merge entry to the right of index
+    push    edi
+    push    esi
+    push    eax
+    push    edx
+
+    push    edi
+    mov     ax, di
+    shl     di, 1
+    add     di, ax
+    shl     di, 3
+    mov     eax, [boot_info.memory_map + edi + 8]
+    add     eax, [boot_info.memory_map + edi + 32]
+    mov     edx, [boot_info.memory_map + edi + 12]
+    adc     edx, [boot_info.memory_map + edi + 36]
+    mov     [boot_info.memory_map + edi + 8], eax
+    mov     [boot_info.memory_map + edi + 12], edx
+    pop     edi
+
+    mov     eax, edi
+    inc     eax     ; index to the right
+    xor     esi, esi
+    xor     edi, edi
+.shift_loop:
+    dec     [boot_info.entry_count]
+    mov     edx, [boot_info.entry_count]    ; if it not equal to last 
+    sub     edx, 1
+    cmp     eax, edx
+    je      .done
+
+    push    eax
+    mov     edi, eax
+    inc     eax
+    mov     esi, eax    ; shift stuff from right to current index counter
+    call    copy_map_entry
+    pop     eax
+    inc     eax         ; inc counter
+    jmp     .shift_loop
+.done:  
+    pop     edx
+    pop     eax
+    pop     esi
+    pop     edi
+    ret

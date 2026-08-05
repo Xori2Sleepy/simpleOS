@@ -30,7 +30,7 @@ stage2_entry:
     call    print_loop
     call    detect_memory_e820
 
-
+    call    memory_map_sanitation
 
     mov     si, msg_attempt_kernel_load
     call    print_loop

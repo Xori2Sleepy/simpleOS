@@ -19,6 +19,9 @@ msg_e820_success    db      "E820 memory mapping success!", 13, 10, 0
 msg_e820_failed     db      "E820 memory mapping failed; Attempting fallback method"
 msg_e801_success    db      "E801 memory mapping success: Note that RAM will be limit to 16 Mb", 13, 10, 0
 msg_e801_failed     db      "E801 memroy mapping failed: Memory cannot be map; Halting CPU...", 13, 10, 0
+msg_sanitation_success      db      "E820 memory map sanitation complete", 13, 10, 0
+msg_sanitation_e801         db      "memory map is done by e801, sanitation can not be done", 13, 10, 0
+msg_map_merge_success       db      "E820 memory map merged!", 13, 10, 0
 
 ; a20
 msg_a20_success     db      "A20 successfully initialize!", 13, 10, 0
