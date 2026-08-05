@@ -119,6 +119,6 @@ get_bios_cursor:
 
 
 %include "src/boot/stage2/32bits/protected32.asm"  ; we seperate the 32bit code, look cleaner. It already a mess here.
-times 12288-($-$$)   db      0
+times 15360-($-$$)   db      0
 section .bss
     scratchpad          resb    1024    ; we only need 512 theoritically but whatever

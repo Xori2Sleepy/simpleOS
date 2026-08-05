@@ -30,6 +30,7 @@ get_cpuid:
     call    cpu_leaf7_detection
     call    cpu_xleaf2to4_detection        ; xleaf for extended leaf (0x80000000+)
     call    cpu_xleaf1_detection
+    call    cpu_xleaf8_detection
     ret
     
 ; -------------------- leaf 0 --------------------  
@@ -223,8 +224,34 @@ cpu_xleaf1_detection:
 
     ret
 
-; ----------------- CPUID ANALYSIS -----------------
+; ----------------- xleaf 8 -----------------  
+cpu_xleaf8_detection:
+    mov     eax, [boot_info.cpu_max_x_leaf]
+    cmp     eax, 0x80000008
+    jb      .failed
 
+    mov     eax, 0x80000008
+    cpuid
+    mov     [boot_info.cpu_featuresx8_eax], eax
+.done:
+    mov     si, msg_cpuid_xleaf8_success
+    call    print_loop
+
+    mov     al, [boot_report]
+    or      al, 1 << 6              ; bits 5 set
+    mov     [boot_report], al
+
+    ret
+
+.failed:
+    mov     si, msg_cpuid_xleaf8_failed
+    call    print_loop
+
+    mov     al, [boot_report]
+    and     al, ~(1 << 6)           ; bits 5 clear
+    mov     [boot_report], al
+
+    ret
 
 ; ------------------------------------------------
 ;               constant space
@@ -236,3 +263,60 @@ CPUID_OTHER_CATEGORY                equ     4
 CPUID_HYPERVISOR                    equ     5
 CPUID_VENDOR_COUNT                  equ     29
 CPUID_VENDOR_TABLE_SIZE             equ     CPUID_VENDOR_COUNT * 12
+
+; ----------------- CPUID ANALYSIS -----------------
+leaf_analysis_long_mode:
+    push    eax
+    mov     eax, [boot_info.cpu_featuresx1_edx]
+    and     eax, 1 << 29
+    test    eax, eax
+    jz      .not_active
+    pop     eax
+    clc
+    ret
+.not_active:
+    pop     eax
+    stc
+    ret
+
+leaf_analysis_PAE:
+    push    eax
+    mov     eax, [boot_info.cpu_features1_edx]
+    and     eax, 1 << 6
+    test    eax, eax
+    jz      .not_active
+    pop     eax
+    clc
+    ret
+.not_active:
+    pop     eax
+    stc
+    ret
+
+leaf_analysis_MSR:
+    push    eax
+    mov     eax, [boot_info.cpu_features1_edx]
+    and     eax, 1 << 5
+    test    eax, eax
+    jz      .not_active
+    pop     eax
+    clc
+    ret
+.not_active:
+    pop     eax
+    stc
+    ret
+
+leaf_analysis_NX:
+    push    eax
+    mov     eax, [boot_info.cpu_featuresx1_edx]
+    and     eax, 1 << 20
+    test    eax, eax
+    jz      .not_active
+    pop     eax
+    clc
+    ret
+.not_active:
+    pop     eax
+    stc
+    ret

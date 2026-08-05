@@ -101,7 +101,7 @@ kernel_dap:
     .sector2read        dw      0x01        ; sector to read
     .destination        dw      scratchpad  ; we loading header to scratch space
     .segment            dw      0x0000      ; segment offset
-    .sector_ad          dq      26
+    .sector_ad          dq      32
 
 disk_trial_counter      db      4
 
@@ -158,6 +158,7 @@ boot_info:
     .cpu_features7_edx  dd      0
     .cpu_featuresx1_ecx dd      0
     .cpu_featuresx1_edx dd      0
+    .cpu_featuresx8_eax dd      0
     .cpu_max_leaf       dd      0
     .cpu_max_x_leaf     dd      0
     .cpu_signature      dd      0

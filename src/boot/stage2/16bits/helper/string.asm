@@ -73,3 +73,5 @@ msg_cpuid_xleaf2to4_failed  db      "   CPUID: Failed to fetch CPU Brand Label",
 msg_cpuid_xleaf2to4_success db      "   CPUID: Successfully fetch CPU Brand Label", 13, 10, 0      
 msg_cpuid_xleaf1_success    db      "   CPUID: Extended leaf 1 successfully retrieved", 13, 10, 0
 msg_cpuid_xleaf1_failed     db      "   CPUID: Extended leaf 1 unavaliable", 13, 10, 0
+msg_cpuid_xleaf8_success    db      "   CPUID: Extended leaf 8 successfully retrieved", 13, 10, 0
+msg_cpuid_xleaf8_failed     db      "   CPUID: Extended leaf 8 unavaliable", 13, 10, 0
