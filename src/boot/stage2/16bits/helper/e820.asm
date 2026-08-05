@@ -122,6 +122,7 @@ detect_memory_e820:
     call    print_loop
     call    halt
 
+; ------------------ E820 sanitation ------------------
 memory_map_sanitation:
     call    memory_map_sort
     jc      .not_sort
@@ -129,6 +130,7 @@ memory_map_sanitation:
 .not_sort:
     ret
 
+; ------------------ E820 merge ------------------
 memory_map_merge:
     xor     ecx, ecx        ; counter for looping
     mov     edx, [boot_info.entry_count]
@@ -178,7 +180,8 @@ memory_map_merge:
     mov     si, msg_map_merge_success
     call    print_loop
     ret
-    
+
+; ------------------ E820 sort ------------------
 memory_map_sort:
     ; Sorting algorithm in assembly? DEAR GOD
     ; Optimization is not a thing here, prirority is the perserve my sanity

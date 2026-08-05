@@ -74,13 +74,16 @@ kernel_info:
 
     .kernel_version     dw      0           ; kernel version
     .kernel_name        dd      0
+    .load_address       dd      0
     .image_size         dd      0
+
     .check_sum          dd      0
 
-    .load_address       dd      0
     .alignment          dd      0
     .entry32            dd      0           ; off set from image start
     .entry64            dd      0
+    .stack_size         dd      0
+    .preferred_stack_top    dd      0
 
     .required_cpu       dd      0           ; cpuid id shit
     .flags              dd      0
@@ -112,6 +115,7 @@ boot_report             dq      0           ; flag and stuff
     ; 2 <- xleaf2to4
     ; 3 <- graphic                          ; used by terminal_interface to determind printing mode
     ; 4 <- e801
+    ; 5 <- xleaf1
 
 boot_info:
     .boot_info_size     dq      0           ; fill later
@@ -152,10 +156,13 @@ boot_info:
     .cpu_features7_ebx  dd      0
     .cpu_features7_ecx  dd      0
     .cpu_features7_edx  dd      0
+    .cpu_featuresx1_ecx dd      0
+    .cpu_featuresx1_edx dd      0
     .cpu_max_leaf       dd      0
     .cpu_max_x_leaf     dd      0
     .cpu_signature      dd      0
-    .vendor_category    db      0
+    .vendor_category    db      0       ; category base on bootloader own sorting definition,
+                                        ; used for vendor specific call
 
     .vendor_name    times 3     dd      0
     .brand_string   times 48    db      0

@@ -29,6 +29,7 @@ get_cpuid:
     call    cpu_leaf1_detection
     call    cpu_leaf7_detection
     call    cpu_xleaf2to4_detection        ; xleaf for extended leaf (0x80000000+)
+    call    cpu_xleaf1_detection
     ret
     
 ; -------------------- leaf 0 --------------------  
@@ -190,6 +191,40 @@ cpu_xleaf2to4_detection:
     mov     [boot_report], al
 
     ret
+
+; ----------------- xleaf 1 -----------------  
+
+cpu_xleaf1_detection:
+    mov     eax, [boot_info.cpu_max_x_leaf]
+    cmp     eax, 0x80000001
+    jb      .failed
+
+    mov     eax, 0x80000001         ; copy eax, ebx, ecx, edx
+    cpuid
+    mov     [boot_info.cpu_featuresx1_ecx], ecx
+    mov     [boot_info.cpu_featuresx1_edx], edx
+.done:
+    mov     si, msg_cpuid_xleaf1_success
+    call    print_loop
+
+    mov     al, [boot_report]
+    or      al, 32                  ; bits 5 set
+    mov     [boot_report], al
+
+    ret
+
+.failed:
+    mov     si, msg_cpuid_xleaf1_failed
+    call    print_loop
+
+    mov     al, [boot_report]
+    and     al, -33                 ; bits 5 clear
+    mov     [boot_report], al
+
+    ret
+
+; ----------------- CPUID ANALYSIS -----------------
+
 
 ; ------------------------------------------------
 ;               constant space

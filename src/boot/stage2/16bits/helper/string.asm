@@ -71,4 +71,5 @@ msg_cpuid_leaf7_failed      db      "   CPUID: Leaf 7 unavailable: Unable to det
 msg_cpuid_leaf7_success     db      "   CPUID: Extended Feature Flags detection success!", 13, 10, 0
 msg_cpuid_xleaf2to4_failed  db      "   CPUID: Failed to fetch CPU Brand Label", 13, 10, 0
 msg_cpuid_xleaf2to4_success db      "   CPUID: Successfully fetch CPU Brand Label", 13, 10, 0      
-
+msg_cpuid_xleaf1_success    db      "   CPUID: Extended leaf 1 successfully retrieved", 13, 10, 0
+msg_cpuid_xleaf1_failed     db      "   CPUID: Extended leaf 1 unavaliable", 13, 10, 0

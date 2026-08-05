@@ -7,13 +7,16 @@ kernel_header:
 
     .kernel_version     dw      0
     .kernel_name        dd      0
+    .load_address       dd      0
     .image_size         dd      0
+
     .check_sum          dd      0
 
-    .load_address       dd      0
     .alignment          dd      0
     .entry32            dd      0           ; off set from image start
     .entry64            dd      0
+    .stack_size         dd      0
+    .preferred_stack_top    dd      0
 
     .required_cpu       dd      0
     .flags              dd      0x0
