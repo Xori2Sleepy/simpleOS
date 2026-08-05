@@ -11,10 +11,35 @@ PDPT:
 times 512 dq 0
 
 align 4096
-PT:
+PD:
 times 512 dq 0
 
+check_long_mode_paging:
+    call    kernel_analyze_long_mode
+    jc      .not_request
+    call    check_long_mode_paging_avaliable
+    jc      .unavaliable
 
+    call    page_link
+    call    page_load
+.not_request:
+
+    ret
+.unavaliable:
+    ret
+
+check_long_mode_paging_avaliable:
+    call    leaf_analysis_long_mode
+    jc      .not_support
+    call    leaf_analysis_pae
+    jc      .not_support
+    call    leaf_analysis_msr
+    jc      .not_support
+    clc
+    ret
+.not_support:
+    stc
+    ret
 
 page_link:
     mov     eax, PDPT
@@ -31,7 +56,7 @@ page_link:
     xor     eax, eax            ; pointer counter
     mov     ecx, 16             ; fill first 32 MiB
 
-.page_table_loop
+.page_table_loop:
     mov     edx, eax
     or      edx, 10000011b      ; Present | Writable | PS <- stop cpu from tranversing page table 
                                 ; and treat this pointer as the page entires
@@ -58,7 +83,7 @@ page_link:
 ; bit 63 <- NX (No execute) <- 1 = cannot execute instructions ; for permission management
 
 page_load:
-    mov     eax, PLM4
+    mov     eax, PML4
     mov     cr3, eax            ; cr3 hold root page table (page directory) address
 
     mov     eax, cr4            ; bits 5 PAE bits (extend 32 bits physical address bus to 36 bit)

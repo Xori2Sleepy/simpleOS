@@ -279,7 +279,7 @@ leaf_analysis_long_mode:
     stc
     ret
 
-leaf_analysis_PAE:
+leaf_analysis_pae:
     push    eax
     mov     eax, [boot_info.cpu_features1_edx]
     and     eax, 1 << 6
@@ -293,7 +293,7 @@ leaf_analysis_PAE:
     stc
     ret
 
-leaf_analysis_MSR:
+leaf_analysis_msr:
     push    eax
     mov     eax, [boot_info.cpu_features1_edx]
     and     eax, 1 << 5
@@ -307,10 +307,95 @@ leaf_analysis_MSR:
     stc
     ret
 
-leaf_analysis_NX:
+leaf_analysis_nx:
     push    eax
     mov     eax, [boot_info.cpu_featuresx1_edx]
     and     eax, 1 << 20
+    test    eax, eax
+    jz      .not_active
+    pop     eax
+    clc
+    ret
+.not_active:
+    pop     eax
+    stc
+    ret
+
+leaf_analysis_1g_page:
+    push    eax
+    mov     eax, [boot_info.cpu_featuresx1_edx]
+    and     eax, 1 << 26
+    test    eax, eax
+    jz      .not_active
+    pop     eax
+    clc
+    ret
+.not_active:
+    pop     eax
+    stc
+    ret
+
+leaf_analysis_pat:
+    push    eax
+    mov     eax, [boot_info.cpu_features1_edx]
+    and     eax, 1 << 16
+    test    eax, eax
+    jz      .not_active
+    pop     eax
+    clc
+    ret
+.not_active:
+    pop     eax
+    stc
+    ret
+
+; COMPLETELY INRELEVANT HELPER FUNCTION (for now) THAT JUST HERE, maybe for the futrue but I doubt it
+leaf_analysis_apic:
+    push    eax
+    mov     eax, [boot_info.cpu_features1_edx]
+    and     eax, 1 << 9
+    test    eax, eax
+    jz      .not_active
+    pop     eax
+    clc
+    ret
+.not_active:
+    pop     eax
+    stc
+    ret
+
+leaf_analysis_x2apic:
+    push    eax
+    mov     eax, [boot_info.cpu_features1_edx]
+    and     eax, 1 << 21
+    test    eax, eax
+    jz      .not_active
+    pop     eax
+    clc
+    ret
+.not_active:
+    pop     eax
+    stc
+    ret
+
+leaf_analysis_tsc:
+    push    eax
+    mov     eax, [boot_info.cpu_features1_edx]
+    and     eax, 1 << 4
+    test    eax, eax
+    jz      .not_active
+    pop     eax
+    clc
+    ret
+.not_active:
+    pop     eax
+    stc
+    ret
+
+leaf_analysis_invariant_tsc:
+    push    eax
+    mov     eax, [boot_info.cpu_featuresx1_edx]
+    and     eax, 1 << 8
     test    eax, eax
     jz      .not_active
     pop     eax

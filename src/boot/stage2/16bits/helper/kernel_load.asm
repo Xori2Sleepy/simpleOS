@@ -132,3 +132,23 @@ kernel_analyze_graphic:
 .m0_gOFF:
     clc
     ret
+
+kernel_analyze_long_mode:
+    ; input: NA
+    ; output: carry (on = request graphic, off = no request for graphic)
+    ; clobbered: eflags ; eax
+    mov     eax, [kernel_info.header_version] ; version 
+    shr     eax, 24     ; checking major version
+    test    eax, eax    ; unreleased major 0
+    je      .major0
+.major0:
+    mov     eax, [kernel_info.flags]
+    and     eax, 1 << 1 ; isolate bits 1 : long_mode
+    test    eax, eax
+    je      .m0_gOFF
+.m0_gON:
+    stc
+    ret
+.m0_gOFF:
+    clc
+    ret

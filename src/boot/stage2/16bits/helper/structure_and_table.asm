@@ -86,9 +86,9 @@ kernel_info:
     .preferred_stack_top    dd      0
 
     .required_cpu       dd      0           ; cpuid id shit
-    .flags              dd      0
-    ; flag: 0 vbe_graphic ; 1 paging ; 2 long mode ; 3 frame buffer require ; 4 check sum ; 
-    ; flag: 5 higher half ; 6 identity map ; 7 flag strict
+    .flags              dd      0           ; boot service flags
+    ; flag: 0 vbe_graphic ; 1 long mode ; 2 frame buffer require ; 3 check sum ; 
+    ; flag: 4 higher half ; 5 kernel reallocatable
 
     .minimum_memory     dq      0
     .preferred_bpp      dd      0           ; order is important,
@@ -101,7 +101,7 @@ kernel_dap:
     .sector2read        dw      0x01        ; sector to read
     .destination        dw      scratchpad  ; we loading header to scratch space
     .segment            dw      0x0000      ; segment offset
-    .sector_ad          dq      32
+    .sector_ad          dq      74
 
 disk_trial_counter      db      4
 

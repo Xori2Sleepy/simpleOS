@@ -18,7 +18,7 @@ protected32_entry:
     mov     gs, ax
 
     mov     esp, 0x7C00
-    ; ------------------------
+
     call    terminal_initialize
 
     mov     edi, msg_welcome32
@@ -26,7 +26,10 @@ protected32_entry:
     mov     edx, 0xF
     call    terminal_print_string32
 
+    call    check_long_mode_paging
     call    halt32
+
+; ---------------------------------------- 
 
 halt32:
     mov     edi, msg_cpu_halted
@@ -38,26 +41,8 @@ halt32:
     hlt
     jmp     .halt_loop
 
-msg_welcome32       db      "Successfully enter 32bits protected mode.", 13, 10, 0
-
-
-msg_test_wrap       db      "Testing screen wrapping mechanism right now we need to fill in"
-                    db      " alot of stuff blah blah balh blah blah skibidi 67 brain rotted"
-                    db      " grr hola cowboy es1p 205 512 2301 actung, actung, actung"
-                    db      " lingan guu lingan guu blah 91238123098", 13, 10, 0
-msg_test_scroll     db      "11111111111111111111111111111111111111111111111111111111111111111111111111111111"
-                    db      "22222222222222222222222222222222222222222222222222222222222222222222222222222222"
-                    db      "33333333333333333333333333333333333333333333333333333333333333333333333333333333" 
-                    db      "44444444444444444444444444444444444444444444444444444444444444444444444444444444"
-                    db      "44444444444444444444444444444444444444444444444444444444444444444444444444444444"
-                    db      "44444444444444444444444444444444444444444444444444444444444444444444444444444444"
-                    db      "44444444444444444444444444444444444444444444444444444444444444444444444444444444"
-                    db      "44444444444444444444444444444444444444444444444444444444444444444444444444444444", 13, 10, 0
-msg_esc_seq_test    db      "\hey\\\a1sponsive?\\holycow\a2a\a4\b6haha", 13, 10, 0
-msg_test            db      "hello", 0
-msg_testabc         db      "abcdefhijklmnopqrstuvwxyz1234567890()*%?<>|", 13, 10, 0
-msg_test_msg        db      "What sup man this is most likely some of the ugliest font you seen ever", 0
-
 %include "src/boot/stage2/32bits/helper/vga_driver.asm"
 %include "src/boot/stage2/32bits/helper/graphic_driver.asm"
 %include "src/boot/stage2/32bits/helper/terminal_interface.asm"
+%include "src/boot/stage2/32bits/helper/32bits_message.asm"
+%include "src/boot/stage2/32bits/helper/paging.asm"

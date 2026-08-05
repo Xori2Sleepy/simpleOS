@@ -238,13 +238,13 @@ memory_map_sort:
     jmp     .shift_compare_loop
 
 .done_sort:
-    mov     si, msg_sanitation_success
+    mov     si, msg_map_sort_success
     call    print_loop
     clc
     ret
 
 .e801:
-    mov     si, msg_sanitation_e801
+    mov     si, msg_map_sort_e801
     call    print_loop
     stc
     ret
