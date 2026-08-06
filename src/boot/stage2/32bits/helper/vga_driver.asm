@@ -154,7 +154,6 @@ enable_cursor:
 
 enable_escape_sequence:
     mov     al, [vga_control_flag]     ; setting mode
-    and     al, 11111011b       ; wiping esc seq bit
     or      al, 00000100b       ; merge bits
     mov     [vga_control_flag], al
 
@@ -437,7 +436,7 @@ col_limit           equ     79
 
 current_row         db      0x00000
 current_col         db      0x00000
-vga_control_flag           db      0
+vga_control_flag    db      0
 
 ; Foreground Colors
 FG_BLACK            equ     0x00

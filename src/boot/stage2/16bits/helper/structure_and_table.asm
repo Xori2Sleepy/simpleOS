@@ -101,7 +101,7 @@ kernel_dap:
     .sector2read        dw      0x01        ; sector to read
     .destination        dw      scratchpad  ; we loading header to scratch space
     .segment            dw      0x0000      ; segment offset
-    .sector_ad          dq      74
+    .sector_ad          dq      73
 
 disk_trial_counter      db      4
 
@@ -168,10 +168,9 @@ boot_info:
     .vendor_name    times 3     dd      0
     .brand_string   times 48    db      0
 
-    align 8
-    .memory_map     times 64 * 24       db      0
-
-
+    ;align 8
+    ;.memory_map     times 64 * 24       db      0   ; 1536 byte
+    .memory_map     equ     0x4000
 ; -------------------- CPUID TABLE --------------------
 CPUID_VENDOR_TABLE:
     ; AMD

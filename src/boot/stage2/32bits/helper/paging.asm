@@ -2,38 +2,55 @@
 
 ; boot-time page table for 64 bits, throw away later when kernel load
 ; page need alignment
-align 4096
-PML4:
-times 512 dq 0
 
-align 4096
-PDPT:
-times 512 dq 0
+PML4    equ      0x90000
+PDPT    equ      0x91000
+PD      equ      0x92000
 
-align 4096
-PD:
-times 512 dq 0
 
 check_long_mode_paging:
-    call    kernel_analyze_long_mode
-    jc      .not_request
+    call    kernel_analyze_long_mode_32
+    jnc     .not_request
+
+    mov     edi, msg_attempt_long_mode
+    mov     esi, 0x0
+    mov     edx, 0xF
+    call    terminal_print_string32
+
     call    check_long_mode_paging_avaliable
     jc      .unavaliable
 
+    mov     edi, [PML4]
+    call    clear_page
+    mov     edi, [PDPT]
+    call    clear_page
+    mov     edi, [PD]
+    call    clear_page
     call    page_link
     call    page_load
-.not_request:
 
+.not_request:
     ret
 .unavaliable:
+    mov     edi, msg_long_mode_unavaliable
+    mov     esi, 0x0
+    mov     edx, 0xF
+    call    terminal_print_string32
+    ret
+
+clear_page:
+    ; input: page pointer in EDI
+    xor     eax, eax
+    mov     ecx, 1024       ; 4096/4
+    rep     stosd
     ret
 
 check_long_mode_paging_avaliable:
-    call    leaf_analysis_long_mode
+    call    leaf_analysis_long_mode_32
     jc      .not_support
-    call    leaf_analysis_pae
+    call    leaf_analysis_pae_32
     jc      .not_support
-    call    leaf_analysis_msr
+    call    leaf_analysis_msr_32
     jc      .not_support
     clc
     ret

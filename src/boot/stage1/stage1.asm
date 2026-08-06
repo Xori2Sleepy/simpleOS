@@ -37,11 +37,13 @@ sector_load:
     jmp     sector_load
 
 .chs:
+    mov     ah, [stage2_dap.sector_ad]
+    inc     ah                  ; chs sector uses 1 indexing
+    mov     cl, ah
     mov     ah, 02h             ; read sector (CHS)
     mov     al, [stage2_dap.sector2read]
     mov     bx, 0x7E00
     mov     ch, 0               ; cylinder 0
-    mov     cl, [stage2_dap.sector_ad]
     mov     dh, 0               ; head 0 
     mov     dl, [boot_drive]
     int     13h                 ; bios disk service
@@ -94,7 +96,7 @@ disk_check_extensions:
     int     0x13
     jc      .failed
     
-    cmp     bx, 55AAh       ; compare signature
+    cmp     bx, 0xAA55      ; compare signature
     jne     .failed
     
     test    cx, 1           ; bit 0 is the extended disk access
@@ -156,7 +158,8 @@ stage2_dap:
     .sector2read        dw      72          ; sector to read
     .destination        dw      0x7E00      ; destination offset
     .segment            dw      0x0000      ; segment offset
-    .sector_ad          dq      2
+    .sector_ad          dq      1
+
 
 times 510-($-$$) db 0 ; fill the rest with 0
 dw 0xaa55

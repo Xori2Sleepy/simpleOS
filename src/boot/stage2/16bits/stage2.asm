@@ -1,7 +1,5 @@
 [bits 16]
 [org 0x7E00]
-
-
 ; --------------- MAIN FUCNTION (basically) --------------- 
 stage2_entry:
     ; environmental setup, already did this in stage 1, but JUST TO MAKE SURE!
@@ -110,7 +108,6 @@ get_bios_cursor:
     ret
 
 ; ---------- just other stuff ----------
-    scratchpad      times   1024 db   0     ; we only need 512 theoritically but whatever
-
+    scratchpad      equ     0x1000
 %include "src/boot/stage2/32bits/protected32.asm"  ; we seperate the 32bit code, look cleaner. It already a mess here.
 times 36864-($-$$)   db      0

@@ -6,14 +6,18 @@ align 16            ; does it even matter?
 ; general
 msg_welcome32       db      "Successfully enter 32bits protected mode.", 13, 10, 0
 
-; paging
+; boot time paging / long mode
+msg_long_mode_unavaliable   db      "   Unable to activate long mode due to incompatable CPU features for "
+                            db      "   either paging or long mode support", 13, 10, 0
+
 
 ; attempt
+msg_attempt_long_mode   db  "Attempting to load page table and activate long mode: ", 13, 10, 0
 
-; random 
+; DEBUGGING
 msg_test_wrap       db      "Testing screen wrapping mechanism right now we need to fill in"
-                    db      " alot of stuff blah blah balh blah blah skibidi 67 brain rotted"
-                    db      " grr hola cowboy es1p 205 512 2301 actung, actung, actung"
+                    db      " alot of stuff blah blah balh blah blah skibidi 67 brain grrrrrr"
+                    db      " grr hola cowboy es1p 205 512 2301 achtung, achtung, achtung"
                     db      " lingan guu lingan guu blah 91238123098", 13, 10, 0
 msg_test_scroll     db      "11111111111111111111111111111111111111111111111111111111111111111111111111111111"
                     db      "22222222222222222222222222222222222222222222222222222222222222222222222222222222"
@@ -23,8 +27,7 @@ msg_test_scroll     db      "111111111111111111111111111111111111111111111111111
                     db      "44444444444444444444444444444444444444444444444444444444444444444444444444444444"
                     db      "44444444444444444444444444444444444444444444444444444444444444444444444444444444"
                     db      "44444444444444444444444444444444444444444444444444444444444444444444444444444444", 13, 10, 0
-msg_esc_seq_test    db      "\hey\\\a1sponsive?\\holycow\a2a\a4\b6haha", 13, 10, 0
+msg_esc_seq_test    db      "\hey\\\a1sponsive?\\holycow\a2a\a4\b6haha", 13, 10, 0  ; escape sequence control bit must be turn on for this to work
 msg_test            db      "hello", 0
 msg_testabc         db      "abcdefhijklmnopqrstuvwxyz1234567890()*%?<>|", 13, 10, 0
-msg_test_msg        db      "What sup man this is most likely some of the ugliest font you seen ever", 0
-
+msg_test_msg        db      "What sup man this is most likely some of the ugliest font you will seen ever!", 0

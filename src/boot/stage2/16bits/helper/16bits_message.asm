@@ -34,14 +34,15 @@ msg_kb_ctrl_failed  db      "Keyboard controller A20 initiation failed. Attmepti
 msg_ff_failed       db      "System Control Port A A20 initiation failed!", 13, 10
 
 ; vbe
-msg_populate_4f00   db      "successfully populate boot info structure with VBE information", 13, 10, 0
-msg_vbe_4f00_failed db      "CRITICAL: Either function 4F00h interupt 0x10 does not exist, or it return garbage value", 13, 10, 0
-msg_vbe_4f00_detected   db  "VBE information loaded into buffer. Attempting to parse information: ", 0
-msg_vbe_4f01_mode_found db  "Valid resolution mode number found! Extracting information...", 13, 10, 0
-msg_vbe_4f01_mode_not_found     db      "No valid resolution mode was found!", 13, 10, 0
-msg_vbe_info_loaded db      "Boot info is now populate with nessary information to start graphic", 13, 10, 0
-msg_vbe_info_failed db      "Graphical information can not be obtain! Falling back to VGA", 13, 10, 0
-msg_unsupport_vbe   db      "VBE is avaliable but the version is unsupported", 13, 10, 0
+; now that I think about why am I even printing vbe messages? no one gonna see these stuff if vbe is turn on...
+msg_vbe_info_loaded db      "   Boot info is now populate with nessary information to start graphic", 13, 10, 0
+msg_vbe_info_failed db      "   Graphical information can not be obtain! Falling back to VGA", 13, 10, 0
+msg_unsupport_vbe   db      "   VBE is avaliable but the version is unsupported", 13, 10, 0
+msg_populate_4f00   db      "   successfully populate boot info structure with VBE information", 13, 10, 0
+msg_vbe_4f00_failed db      "   CRITICAL: Either function 4F00h interupt 0x10 does not exist, or it return garbage value", 13, 10, 0
+msg_vbe_4f00_detected   db  "   VBE information loaded into buffer. Attempting to parse information: ", 0
+msg_vbe_4f01_mode_found db  "   Valid resolution mode number found! Extracting information...", 13, 10, 0
+msg_vbe_4f01_mode_not_found     db      "   No valid resolution mode was found!", 13, 10, 0
 
 ; kernel & disk
 msg_rs_success      db      "   Disk reset success!", 13, 10, 0
@@ -59,6 +60,7 @@ msg_recognized_magic    db  "   Recognized magic: kernel header successfully par
 msg_attempt_a20     db      "Attempting to enable A20: ", 0
 msg_attempt_e820    db      "Attempting to build memory map: ", 0
 msg_attempt_cpuid   db      "Attempting to fetch data from CPUID: ", 13, 10, 0
+msg_attempt_vbe     db      "Attempting to acticate VBE graphic: ", 13, 10, 0
 msg_attempt_kernel_load     db      "Attempting to load kernel header: ", 13, 10, 0
 msg_attempt_header_read     db      "Attempting to read kernel header: ", 13, 10, 0
 msg_attempt_sanitation      db      "Attempting to sanitize memory map: ", 13, 10, 0

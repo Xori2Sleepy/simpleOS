@@ -5,10 +5,11 @@ print_handling:
     jnc     .graphic_not_requested
 
 .graphic_requested:
+    mov     si, msg_attempt_vbe
+    call    print_loop
     call    vbe_activate
     stc
     ret
-
 .graphic_not_requested:
     call    get_bios_cursor     ; need before jumping, make sure no write to buffer after this!
     clc

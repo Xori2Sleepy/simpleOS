@@ -1,6 +1,4 @@
 [bits 32]
-; writing this file make me relize I been taking bios interrupt for granted
-; thought icl it kinda fun writing my own stuff
 
 extern null_descriptor
 extern kernelcode_32bits_descriptor
@@ -27,6 +25,7 @@ protected32_entry:
     call    terminal_print_string32
 
     call    check_long_mode_paging
+
     call    halt32
 
 ; ---------------------------------------- 
@@ -41,6 +40,7 @@ halt32:
     hlt
     jmp     .halt_loop
 
+%include "src/boot/stage2/32bits/helper/analysis_functions.asm"
 %include "src/boot/stage2/32bits/helper/vga_driver.asm"
 %include "src/boot/stage2/32bits/helper/graphic_driver.asm"
 %include "src/boot/stage2/32bits/helper/terminal_interface.asm"

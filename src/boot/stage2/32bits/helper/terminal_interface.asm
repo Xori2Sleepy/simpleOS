@@ -1,7 +1,7 @@
 [bits 32]
+
 terminal_initialize:
     ; hard coded function to prepare some random stuff
-
     mov     al, [boot_report]
     and     al, 8               ; isolate 3rd bit
     test    al, al
