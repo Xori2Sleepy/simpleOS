@@ -25,9 +25,26 @@ protected32_entry:
     call    terminal_print_string32
 
     call    check_long_mode_paging
+    jc      jmp_long_mode
 
     call    halt32
 
+jmp_long_mode:
+ ;   mov     edi, msg_long_mode_jump
+    mov     esi, 0x0
+    mov     edx, 0xF
+  ;  call    terminal_print_string32
+
+    mov     eax, 0xC0000080
+    rdmsr   ; read
+    or      eax, 1 << 8 ; long mode enable
+    wrmsr   ; write
+
+    mov     eax, cr0
+    or      eax, 0x80000000
+    mov     cr0, eax
+
+    jmp     kernelcode_64bits_descriptor:long64_entry
 ; ---------------------------------------- 
 
 halt32:
@@ -46,3 +63,5 @@ halt32:
 %include "src/boot/stage2/32bits/helper/terminal_interface.asm"
 %include "src/boot/stage2/32bits/helper/32bits_message.asm"
 %include "src/boot/stage2/32bits/helper/paging.asm"
+
+%include "src/boot/stage2/64bits/long64.asm"

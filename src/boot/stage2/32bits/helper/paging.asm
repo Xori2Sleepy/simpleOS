@@ -7,7 +7,6 @@ PML4    equ      0x90000
 PDPT    equ      0x91000
 PD      equ      0x92000
 
-
 check_long_mode_paging:
     call    kernel_analyze_long_mode_32
     jnc     .not_request
@@ -26,16 +25,38 @@ check_long_mode_paging:
     call    clear_page
     mov     edi, [PD]
     call    clear_page
+
+    mov     edi, msg_page_buffer_clear
+    mov     esi, 0x0
+    mov     edx, 0xF
+    call    terminal_print_string32
+
     call    page_link
+
+    mov     edi, msg_page_link
+    mov     esi, 0x0
+    mov     edx, 0xF
+    call    terminal_print_string32
+
     call    page_load
 
+    mov     edi, msg_page_load
+    mov     esi, 0x0
+    mov     edx, 0xF
+    call    terminal_print_string32
+
+    stc     ; indicate that we do want to enter 64 bits long mode
+    ret
+
 .not_request:
+    clc
     ret
 .unavaliable:
     mov     edi, msg_long_mode_unavaliable
     mov     esi, 0x0
     mov     edx, 0xF
     call    terminal_print_string32
+    clc
     ret
 
 clear_page:

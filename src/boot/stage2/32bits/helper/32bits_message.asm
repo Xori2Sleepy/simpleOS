@@ -7,9 +7,11 @@ align 16            ; does it even matter?
 msg_welcome32       db      "Successfully enter 32bits protected mode.", 13, 10, 0
 
 ; boot time paging / long mode
+msg_page_link       db      "   Page structure successfully linked", 13, 10, 0
+msg_page_load       db      "   Page pointer loaded into memory!", 13, 10, 0
+msg_page_buffer_clear       db      "   Page table buffer have been zerored!", 13, 10, 0
 msg_long_mode_unavaliable   db      "   Unable to activate long mode due to incompatable CPU features for "
                             db      "   either paging or long mode support", 13, 10, 0
-
 
 ; attempt
 msg_attempt_long_mode   db  "Attempting to load page table and activate long mode: ", 13, 10, 0

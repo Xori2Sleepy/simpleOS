@@ -53,14 +53,14 @@ stage2_entry:
     push    eax
 
     call    print_handling
-    jc      .jmp32
+    jc      jmp32
 
     mov     si, msg_gdt
     call    print_loop
     mov     si, msg_far_jump    ; print stuff before interupt cant be call!
     call    print_loop
 
-.jmp32:
+jmp32:
     pop     eax
     mov     cr0, eax            ; protected mode officially on
     jmp     kernelcode_32bits_descriptor:protected32_entry
