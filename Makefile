@@ -1,5 +1,5 @@
 # Ensure the build directories always exist before compiling
-$(shell mkdir -p target/bin target/lst target/debug)
+$(shell mkdir -p target/bin target/lst)
 
 .PHONY: all build debug_build run debug clean kill
 

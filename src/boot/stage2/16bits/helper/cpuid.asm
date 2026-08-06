@@ -29,6 +29,8 @@ get_cpuid:
     call    cpu_leaf1_detection
     call    cpu_leaf7_detection
     call    cpu_xleaf2to4_detection        ; xleaf for extended leaf (0x80000000+)
+    call    cpu_xleaf1_detection
+    call    cpu_xleaf8_detection
     ret
     
 ; -------------------- leaf 0 --------------------  
@@ -191,6 +193,66 @@ cpu_xleaf2to4_detection:
 
     ret
 
+; ----------------- xleaf 1 -----------------  
+
+cpu_xleaf1_detection:
+    mov     eax, [boot_info.cpu_max_x_leaf]
+    cmp     eax, 0x80000001
+    jb      .failed
+
+    mov     eax, 0x80000001         ; copy eax, ebx, ecx, edx
+    cpuid
+    mov     [boot_info.cpu_featuresx1_ecx], ecx
+    mov     [boot_info.cpu_featuresx1_edx], edx
+.done:
+    mov     si, msg_cpuid_xleaf1_success
+    call    print_loop
+
+    mov     al, [boot_report]
+    or      al, 32                  ; bits 5 set
+    mov     [boot_report], al
+
+    ret
+
+.failed:
+    mov     si, msg_cpuid_xleaf1_failed
+    call    print_loop
+
+    mov     al, [boot_report]
+    and     al, -33                 ; bits 5 clear
+    mov     [boot_report], al
+
+    ret
+
+; ----------------- xleaf 8 -----------------  
+cpu_xleaf8_detection:
+    mov     eax, [boot_info.cpu_max_x_leaf]
+    cmp     eax, 0x80000008
+    jb      .failed
+
+    mov     eax, 0x80000008
+    cpuid
+    mov     [boot_info.cpu_featuresx8_eax], eax
+.done:
+    mov     si, msg_cpuid_xleaf8_success
+    call    print_loop
+
+    mov     al, [boot_report]
+    or      al, 1 << 6              ; bits 5 set
+    mov     [boot_report], al
+
+    ret
+
+.failed:
+    mov     si, msg_cpuid_xleaf8_failed
+    call    print_loop
+
+    mov     al, [boot_report]
+    and     al, ~(1 << 6)           ; bits 5 clear
+    mov     [boot_report], al
+
+    ret
+
 ; ------------------------------------------------
 ;               constant space
 ; ------------------------------------------------
@@ -201,3 +263,145 @@ CPUID_OTHER_CATEGORY                equ     4
 CPUID_HYPERVISOR                    equ     5
 CPUID_VENDOR_COUNT                  equ     29
 CPUID_VENDOR_TABLE_SIZE             equ     CPUID_VENDOR_COUNT * 12
+
+; ----------------- CPUID ANALYSIS -----------------
+leaf_analysis_long_mode:
+    push    eax
+    mov     eax, [boot_info.cpu_featuresx1_edx]
+    and     eax, 1 << 29
+    test    eax, eax
+    jz      .not_active
+    pop     eax
+    clc
+    ret
+.not_active:
+    pop     eax
+    stc
+    ret
+
+leaf_analysis_pae:
+    push    eax
+    mov     eax, [boot_info.cpu_features1_edx]
+    and     eax, 1 << 6
+    test    eax, eax
+    jz      .not_active
+    pop     eax
+    clc
+    ret
+.not_active:
+    pop     eax
+    stc
+    ret
+
+leaf_analysis_msr:
+    push    eax
+    mov     eax, [boot_info.cpu_features1_edx]
+    and     eax, 1 << 5
+    test    eax, eax
+    jz      .not_active
+    pop     eax
+    clc
+    ret
+.not_active:
+    pop     eax
+    stc
+    ret
+
+leaf_analysis_nx:
+    push    eax
+    mov     eax, [boot_info.cpu_featuresx1_edx]
+    and     eax, 1 << 20
+    test    eax, eax
+    jz      .not_active
+    pop     eax
+    clc
+    ret
+.not_active:
+    pop     eax
+    stc
+    ret
+
+leaf_analysis_1g_page:
+    push    eax
+    mov     eax, [boot_info.cpu_featuresx1_edx]
+    and     eax, 1 << 26
+    test    eax, eax
+    jz      .not_active
+    pop     eax
+    clc
+    ret
+.not_active:
+    pop     eax
+    stc
+    ret
+
+leaf_analysis_pat:
+    push    eax
+    mov     eax, [boot_info.cpu_features1_edx]
+    and     eax, 1 << 16
+    test    eax, eax
+    jz      .not_active
+    pop     eax
+    clc
+    ret
+.not_active:
+    pop     eax
+    stc
+    ret
+
+; COMPLETELY INRELEVANT HELPER FUNCTION (for now) THAT JUST HERE, maybe for the futrue but I doubt it
+leaf_analysis_apic:
+    push    eax
+    mov     eax, [boot_info.cpu_features1_edx]
+    and     eax, 1 << 9
+    test    eax, eax
+    jz      .not_active
+    pop     eax
+    clc
+    ret
+.not_active:
+    pop     eax
+    stc
+    ret
+
+leaf_analysis_x2apic:
+    push    eax
+    mov     eax, [boot_info.cpu_features1_edx]
+    and     eax, 1 << 21
+    test    eax, eax
+    jz      .not_active
+    pop     eax
+    clc
+    ret
+.not_active:
+    pop     eax
+    stc
+    ret
+
+leaf_analysis_tsc:
+    push    eax
+    mov     eax, [boot_info.cpu_features1_edx]
+    and     eax, 1 << 4
+    test    eax, eax
+    jz      .not_active
+    pop     eax
+    clc
+    ret
+.not_active:
+    pop     eax
+    stc
+    ret
+
+leaf_analysis_invariant_tsc:
+    push    eax
+    mov     eax, [boot_info.cpu_featuresx1_edx]
+    and     eax, 1 << 8
+    test    eax, eax
+    jz      .not_active
+    pop     eax
+    clc
+    ret
+.not_active:
+    pop     eax
+    stc
+    ret

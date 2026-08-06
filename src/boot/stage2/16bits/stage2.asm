@@ -1,7 +1,5 @@
 [bits 16]
 [org 0x7E00]
-
-
 ; --------------- MAIN FUCNTION (basically) --------------- 
 stage2_entry:
     ; environmental setup, already did this in stage 1, but JUST TO MAKE SURE!
@@ -30,11 +28,14 @@ stage2_entry:
     call    print_loop
     call    detect_memory_e820
 
+    mov     si, msg_attempt_sanitation
+    call    print_loop
     call    memory_map_sanitation
 
     mov     si, msg_attempt_kernel_load
     call    print_loop
     call    kernel_load
+
     mov     si, msg_attempt_header_read
     call    print_loop
     call    kernel_header_read
@@ -51,24 +52,15 @@ stage2_entry:
     or      eax, 1              ; turn the first bits of cr0 on (Protection Enable, PE bits)
     push    eax
 
-    call    kernel_analyze_graphic
-    jnc     .graphic_not_requested
+    call    print_handling
+    jc      jmp32
 
-.graphic_requested:
-    call    vbe_activate
-    jmp     .jmp32
-
-.graphic_not_requested:
     mov     si, msg_gdt
     call    print_loop
     mov     si, msg_far_jump    ; print stuff before interupt cant be call!
     call    print_loop
 
-    call    get_bios_cursor     ; need before jumping, make sure no write to buffer after this!
-                                ; used scratch pad SO BE CAREFUL
-    jmp     .jmp32
-
-.jmp32:
+jmp32:
     pop     eax
     mov     cr0, eax            ; protected mode officially on
     jmp     kernelcode_32bits_descriptor:protected32_entry
@@ -80,7 +72,7 @@ stage2_entry:
 %include "src/boot/stage2/16bits/helper/basic_print.asm"
 %include "src/boot/stage2/16bits/helper/kernel_load.asm"
 %include "src/boot/stage2/16bits/helper/structure_and_table.asm"
-%include "src/boot/stage2/16bits/helper/string.asm"
+%include "src/boot/stage2/16bits/helper/16bits_message.asm"
 %include "src/boot/stage2/16bits/helper/vbe.asm"
 
 ; --------------- small halt functions ---------------
@@ -116,9 +108,6 @@ get_bios_cursor:
     ret
 
 ; ---------- just other stuff ----------
-
-
+    scratchpad      equ     0x1000
 %include "src/boot/stage2/32bits/protected32.asm"  ; we seperate the 32bit code, look cleaner. It already a mess here.
-times 12288-($-$$)   db      0
-section .bss
-    scratchpad          resb    1024    ; we only need 512 theoritically but whatever
+times 36864-($-$$)   db      0

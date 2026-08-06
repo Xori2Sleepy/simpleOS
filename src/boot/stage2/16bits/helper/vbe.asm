@@ -1,6 +1,20 @@
 [bits 16]
 
-; non fatal error check later
+print_handling:
+    call    kernel_analyze_graphic
+    jnc     .graphic_not_requested
+
+.graphic_requested:
+    mov     si, msg_attempt_vbe
+    call    print_loop
+    call    vbe_activate
+    stc
+    ret
+.graphic_not_requested:
+    call    get_bios_cursor     ; need before jumping, make sure no write to buffer after this!
+    clc
+    ret
+
 vbe_activate:
     call    vbe_4f00            ; load mode number list pointer and information into boot_info's vbe section
     call    vbe_4f01            ; return in selected_mode, carry on if it failed

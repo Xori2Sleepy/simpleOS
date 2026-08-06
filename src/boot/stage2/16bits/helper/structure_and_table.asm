@@ -74,18 +74,21 @@ kernel_info:
 
     .kernel_version     dw      0           ; kernel version
     .kernel_name        dd      0
+    .load_address       dd      0
     .image_size         dd      0
+
     .check_sum          dd      0
 
-    .load_address       dd      0
     .alignment          dd      0
     .entry32            dd      0           ; off set from image start
     .entry64            dd      0
+    .stack_size         dd      0
+    .preferred_stack_top    dd      0
 
     .required_cpu       dd      0           ; cpuid id shit
-    .flags              dd      0
-    ; flag: 0 vbe_graphic ; 1 paging ; 2 long mode ; 3 frame buffer require ; 4 check sum ; 
-    ; flag: 5 higher half ; 6 identity map ; 7 flag strict
+    .flags              dd      0           ; boot service flags
+    ; flag: 0 vbe_graphic ; 1 long mode ; 2 frame buffer require ; 3 check sum ; 
+    ; flag: 4 higher half ; 5 kernel reallocatable
 
     .minimum_memory     dq      0
     .preferred_bpp      dd      0           ; order is important,
@@ -98,7 +101,7 @@ kernel_dap:
     .sector2read        dw      0x01        ; sector to read
     .destination        dw      scratchpad  ; we loading header to scratch space
     .segment            dw      0x0000      ; segment offset
-    .sector_ad          dq      26
+    .sector_ad          dq      73
 
 disk_trial_counter      db      4
 
@@ -112,6 +115,7 @@ boot_report             dq      0           ; flag and stuff
     ; 2 <- xleaf2to4
     ; 3 <- graphic                          ; used by terminal_interface to determind printing mode
     ; 4 <- e801
+    ; 5 <- xleaf1
 
 boot_info:
     .boot_info_size     dq      0           ; fill later
@@ -152,18 +156,21 @@ boot_info:
     .cpu_features7_ebx  dd      0
     .cpu_features7_ecx  dd      0
     .cpu_features7_edx  dd      0
+    .cpu_featuresx1_ecx dd      0
+    .cpu_featuresx1_edx dd      0
+    .cpu_featuresx8_eax dd      0
     .cpu_max_leaf       dd      0
     .cpu_max_x_leaf     dd      0
     .cpu_signature      dd      0
-    .vendor_category    db      0
+    .vendor_category    db      0       ; category base on bootloader own sorting definition,
+                                        ; used for vendor specific call
 
     .vendor_name    times 3     dd      0
     .brand_string   times 48    db      0
 
-    align 8
-    .memory_map     times 64 * 24       db      0
-
-
+    ;align 8
+    ;.memory_map     times 64 * 24       db      0   ; 1536 byte
+    .memory_map     equ     0x4000
 ; -------------------- CPUID TABLE --------------------
 CPUID_VENDOR_TABLE:
     ; AMD

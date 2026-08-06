@@ -10,7 +10,7 @@ disk_check_extensions:
     int     0x13
     jc      .failed
     
-    cmp     bx, 55AAh       ; compare signature
+    cmp     bx, 0xAA55      ; compare signature
     jne     .failed
     
     test    cx, 1           ; bit 0 is the extended disk access
@@ -39,12 +39,15 @@ kernel_load:
     jnc     .success
     call    disk_error
     jmp     kernel_load
+
 .chs:
+    mov     ah, [kernel_dap.sector_ad]
+    inc     ah
+    mov     cl, ah
     mov     ah, 02h
     mov     al, [kernel_dap.sector2read]
     mov     bx, [kernel_dap.destination]
     mov     ch, 0
-    mov     cl, [kernel_dap.sector_ad]
     mov     dh, 0
     mov     dl, [boot_info.boot_drive]
     int     13h
@@ -121,9 +124,34 @@ kernel_analyze_graphic:
     shr     eax, 24     ; checking major version
     test    eax, eax    ; unreleased major 0
     je      .major0
+    ret 
 .major0:
     mov     eax, [kernel_info.flags]
     and     eax, 1      ; isolate bits 0 : graphic
+    test    eax, eax
+    je      .m0_gOFF
+.m0_gON:
+    stc
+    ret
+.m0_gOFF:
+    clc
+    ret
+
+kernel_analyze_long_mode:
+
+    mov     edi, msg_welcome32
+    mov     esi, 0x0
+    mov     edx, 0xF
+    call    terminal_print_string32
+
+    mov     eax, [kernel_info.header_version] ; version 
+    shr     eax, 24     ; checking major version
+    test    eax, eax    ; unreleased major 0
+    je      .major0
+    ret
+.major0:
+    mov     eax, [kernel_info.flags]
+    and     eax, 1 << 1 ; isolate bits 1 : long_mode
     test    eax, eax
     je      .m0_gOFF
 .m0_gON:
