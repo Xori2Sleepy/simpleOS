@@ -3,6 +3,7 @@
 ; ASCII LOOKUP TABLE (0 to 127)
 ; Each entry is 4 bytes (a 32-bit pointer) pointing directly to the font glyph data.
 ; ==============================================================================
+
 align 4
 ASCII_lookup_table:
     ; --- ASCII 0 to 31 (Control Characters / Unused) ---

@@ -57,7 +57,6 @@ halt32:
     hlt
     jmp     .halt_loop
 
-%include "src/boot/stage2/64bits/long64.asm"
 
 %include "src/boot/stage2/32bits/helper/analysis_functions.asm"
 %include "src/boot/stage2/32bits/helper/vga_driver.asm"
@@ -66,4 +65,4 @@ halt32:
 %include "src/boot/stage2/32bits/helper/32bits_message.asm"
 %include "src/boot/stage2/32bits/helper/paging.asm"
 
-%include "src/boot/stage2/64bits/try.asm"
+%include "src/boot/stage2/64bits/long64.asm"
