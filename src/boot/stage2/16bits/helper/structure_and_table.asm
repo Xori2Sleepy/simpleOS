@@ -18,10 +18,6 @@
 %endmacro
 
 ; -------------------- gdt space ------------------------
-global  null_descriptor
-global  kernelcode_32bits_descriptor
-global  kernelcode_64bits_descriptor
-global  kerneldata_32bits_descriptor
 
 null_descriptor                     equ     0x00
 kernelcode_32bits_descriptor        equ     0x08
@@ -40,7 +36,7 @@ gdt_start:
     ; 3 -> code seg
     ; 2 -> conforming/direction
     ; 1 -> rw for code 1 allow reading and for data 1 allow writing
-    ; 0 -> cpu access, set to zero, legacy feature not important if use paging
+    ; 0 -> cpu access, set to zero
     ; bit 3,2,1,0 become type field if it a system structure
     
     ; other flags:
@@ -55,7 +51,7 @@ gdt_start:
     ; (32 bits) base, (20 bits) limit, (bytes) access bytes, (4 bits) others flags
     gdt_entries 0, 0, 0, 0                      ; 0x00 - null descriptor
     gdt_entries 0, 0xFFFFF, 10011010b, 1100b    ; 0x08 - 32 bits Kernel code segment descriptor
-    gdt_entries 0, 0xFFFFF, 10011010b, 0010b    ; 0x10 - 64 bits Kernel code segment descriptor
+    gdt_entries 0, 0xFFFFF, 10011010b, 1010b    ; 0x10 - 64 bits Kernel code segment descriptor
     gdt_entries 0, 0xFFFFF, 10010010b, 1100b    ; 0x18 - 32 bits Data segment descriptor
 gdt_end:
 

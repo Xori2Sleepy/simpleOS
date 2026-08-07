@@ -1,10 +1,9 @@
 [bits 32]
 
-extern null_descriptor
-extern kernelcode_32bits_descriptor
-extern kernelcode_64bits_descriptor
-extern kerneldata_32bits_descriptor
-extern bios_cursor
+null_descriptor                     equ     0x00
+kernelcode_32bits_descriptor        equ     0x08
+kernelcode_64bits_descriptor        equ     0x10
+kerneldata_32bits_descriptor        equ     0x18
 
 protected32_entry:
     cli
@@ -30,20 +29,21 @@ protected32_entry:
     call    halt32
 
 jmp_long_mode:
- ;   mov     edi, msg_long_mode_jump
+   ; mov     edi, msg_long_mode_jump
     mov     esi, 0x0
     mov     edx, 0xF
-  ;  call    terminal_print_string32
-
-    mov     eax, 0xC0000080
+ ;  call    terminal_print_string32
+    
+    ; turning paging on
+    mov     ecx, 0xC0000080
     rdmsr   ; read
     or      eax, 1 << 8 ; long mode enable
     wrmsr   ; write
 
     mov     eax, cr0
-    or      eax, 0x80000000
+    or      eax, 1 << 31
     mov     cr0, eax
-
+    
     jmp     kernelcode_64bits_descriptor:long64_entry
 ; ---------------------------------------- 
 
@@ -56,6 +56,7 @@ halt32:
     cli
     hlt
     jmp     .halt_loop
+
 
 %include "src/boot/stage2/32bits/helper/analysis_functions.asm"
 %include "src/boot/stage2/32bits/helper/vga_driver.asm"

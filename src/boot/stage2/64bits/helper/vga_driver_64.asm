@@ -1,4 +1,5 @@
 [bits 64]
+default abs
 ; THIS IS GOING TO BE THE LEAST CLEAN REGISTER USAGE YOU WILL EVER SEEN
 ; it a hobby OS and functions is is not uses by other process so... it doesnt matter that much
 ; the problem is for my future self to fix ;)
@@ -10,7 +11,7 @@
 ; 2000 slot of 80 col and 25 rows, each slot is 2 bytes
 ; 0xB8000 + (row * 80 + col) * 2 <= position logic
 
-deconstruct_bios_cursor:
+deconstruct_bios_cursor_64:
     ; purpose: it get row and col information from when we are still in 16 bits real mode
     ; input: NA
     ; out: [current_row], [current_col]
@@ -18,18 +19,18 @@ deconstruct_bios_cursor:
     ; note: we doesnt care what it clobbered, it call at the start anyway
     xor     edi, edi
     mov     eax, [scratchpad]
-    call    vga_position_translate  ; return row and col in al ah respectively
+    call    vga_position_translate_64  ; return row and col in al ah respectively
     mov     [current_row], al
     mov     [current_col], ah
     ret
 
-vga_clear_screen:
+vga_clear_screen_64:
     ; purpose: clear the screen
     ; input: ah <- color
     ; clobbered: eflag
-    push    edi
-    push    ecx
-    push    ax
+    push    rdi
+    push    rcx
+    push    rax
     mov     edi, VGA_buffer_base
     mov     al, 0x20            ; white space
     mov     ecx, 2000           ; 2k cells
@@ -37,20 +38,20 @@ vga_clear_screen:
     rep     stosw
     mov     [current_row], 0
     mov     [current_col], 0
-    pop     ax
-    pop     ecx
-    pop     edi
+    pop     rax
+    pop     rcx
+    pop     rdi
     ret                         ; es:edi
 
-vga_position_translate:
+vga_position_translate_64:
     ; purpose: translate between linear and col/row address
     ;        : max input for linear is 2000! and col/row is 25*80!
     ; input: linear input -> edi = 0, eax = linear (or ax is fine)
     ;      : col/row input -> edi != 0, al = row, ah = col
     ; output: linear input -> al =  row, ah = col
     ;       : col/row input -> eax = linear address
-    push    ecx
-    push    edx
+    push    rcx
+    push    rdx
     
     movzx   eax, ax
 
@@ -63,8 +64,8 @@ vga_position_translate:
     movzx   eax, al
     imul    eax, 80
     add     eax, ecx            ; (al[row] * 80) + ah[col] in eax
-    pop     edx
-    pop     ecx
+    pop     rdx
+    pop     rcx
     ret
     
 .linear_input:
@@ -74,11 +75,11 @@ vga_position_translate:
     div     cx                  ; div 8 bits is actually perfect for this job :D
                                 ; ax is row and dx is col now   
     mov     ah, dl              ; ax alway lower than 1 byte, so this is possible!
-    pop     edx
-    pop     ecx
+    pop     rdx
+    pop     rcx
     ret
 
-vga_move_cursor:
+vga_move_cursor_64:
     ; purpose: well, its move cursor, what more there is to say...
     ;        : edit: it still move cursor, but with more swag :)
     ;        : edit: I take it back, it more like 'more nightmare'
@@ -87,10 +88,10 @@ vga_move_cursor:
     ; clobbered: flagsS
     ; if upper 16 bits is all 0, it absolute move
     ; if upper 16 bits is not 0, then we do incremental mode by al, ah
-    push    edx
-    push    edi
-    push    ecx
-    push    eax
+    push    rdx
+    push    rdi
+    push    rcx
+    push    rax
 
     mov     edi, eax
 
@@ -99,14 +100,14 @@ vga_move_cursor:
     jz      .skip
     add     al, byte [current_row]      ; eh, dumb logic but it work, sorry man ;-;
     add     ah, byte [current_col]
-    call    vga_grid_normalization 
+    call    vga_grid_normalization_64 
 
 .skip:
     mov     byte [current_row], al
     mov     byte [current_col], ah
 
     mov     edi, 1
-    call    vga_position_translate  ; return linear address in eax
+    call    vga_position_translate_64  ; return linear address in eax
     mov     ecx, eax
 
     ; work in 16 bits, VGA card cant understand 32 bits, alledgedly...
@@ -126,13 +127,13 @@ vga_move_cursor:
     mov     al, cl
     out     dx, al
 
-    pop     eax
-    pop     ecx
-    pop     edi
-    pop     edx
+    pop     rax
+    pop     rcx
+    pop     rdi
+    pop     rdx
     ret
 
-disable_cursor:
+disable_cursor_64:
     mov     dx, 0x3D4           ; write to port 0x3D4
     mov     al, 0x0A            ; write to 0A regs (cursor start)
     out     dx, al
@@ -142,7 +143,7 @@ disable_cursor:
     out     dx, al
     ret
 
-enable_cursor:
+enable_cursor_64:
     mov     dx, 0x3D4
     mov     al, 0x0A
     out     dx, al
@@ -152,17 +153,17 @@ enable_cursor:
     out     dx, al
     ret
 
-enable_escape_sequence:
+enable_escape_sequence_64:
     mov     al, [vga_control_flag]     ; setting mode
     or      al, 00000100b       ; merge bits
     mov     [vga_control_flag], al
 
-disable_escape_sequence:
+disable_escape_sequence_64:
     mov     al, [vga_control_flag]     ; setting mode
     and     al, 11111011b       ; wiping esc seq bit
     mov     [vga_control_flag], al
 
-vga_grid_normalization:
+vga_grid_normalization_64:
     ; I KNOW I KNOW THIS CODE IS HORRIBLE BUT I DONT GOT NO TIME TO WORK ON THIS!
     ; purpose: normalized grid input (row and col) to make it actually make sense. (basically wrapping logic)
     ; input: al = row, ah = col
@@ -191,10 +192,10 @@ vga_grid_normalization:
     cmp     bl, 01b
     jne     .skip_clear
 
-    push    ax
+    push    rax
     mov     ah, BG_BLACK
-    call    vga_clear_screen
-    pop     ax
+    call    vga_clear_screen_64
+    pop     rax
 
     .skip_clear:
     sub     al, row_limit + 1
@@ -206,7 +207,7 @@ vga_grid_normalization:
 
     mov     al, 1
     xor     ah, ah              ; history function is not implement! it take too much memory
-    call    shift_VGA_buffer
+    call    shift_VGA_buffer_64
     xor     eax, eax            ; absolute
     mov     al, 24
     mov     ah, 0
@@ -216,13 +217,13 @@ vga_grid_normalization:
     .done:
     ret
 
-shift_VGA_buffer:
+shift_VGA_buffer_64:
     ; purpose: shift stuff from vga buffer up by one
     ; input: al <- amount to shift | ah <- save or not (this is not implement, 2 much buffer need)
-    push    esi
-    push    edi
-    push    ecx
-    push    eax
+    push    rsi
+    push    rdi
+    push    rcx
+    push    rax
 
     cld
     mov     esi, (VGA_buffer_base + 160)    ; second row
@@ -238,14 +239,14 @@ shift_VGA_buffer:
     mov     ecx, 80
     rep     stosw
     
-    pop     eax
-    pop     ecx
-    pop     edi
-    pop     esi
+    pop     rax
+    pop     rcx
+    pop     rdi
+    pop     rsi
     ret
 
 ; ---------- Print functions ----------  
-vga_print_char32:
+vga_print_char64:
     ; purpose: print a single character, in absolute mode a row/col is needed 
     ;          but relative will print to cursor
     ; input: edi <- mode, ax <- char, if (abs mode)  = row, dh = col, 
@@ -254,43 +255,43 @@ vga_print_char32:
     ; note: ((BG | FG ) << 8 ) | char   should be your format for ax
     ;     : for simplicity this thing only write! no incrimental features!
     ;     : edi = 0 = relativwe
-    push    edi
-    push    ax
-    push    dx
+    push    rdi
+    push    rax
+    push    rdx
     test    edi, edi
     je      .relative           ; print relative to cursor position
 
     .absolute:
     ; natually fall here, print to col/row 
-    push    eax
+    push    rax
     mov     ax, dx
     mov     edi, 1              ; this is mode argument for functions!
-    call    vga_position_translate  ; linear in eax
+    call    vga_position_translate_64  ; linear in eax
     shl     eax, 1
     lea     edi, [eax + VGA_buffer_base]
-    pop     eax
+    pop     rax
     jmp     .exit
 
     .relative:
-    push    eax
+    push    rax
     xor     eax, eax
     mov     al, [current_row]
     mov     ah, [current_col]
     mov     edi, 1              ; row/col input mode
-    call    vga_position_translate  ; linear in eax
+    call    vga_position_translate_64  ; linear in eax
     shl     eax, 1
     lea     edi, [eax + VGA_buffer_base]    ; VGA_buffer_base is a constant so it treated as a imm!
-    pop     eax
+    pop     rax
     jmp     .exit
 
     .exit:
     mov     word [edi], ax
-    pop     dx
-    pop     ax
-    pop     esi
+    pop     rdx
+    pop     rax
+    pop     rsi
     ret
     
-vga_print_string32:
+vga_print_string64:
     ; input regs: edi <- pointer, ah <- 0 (deafult) else uses ah as color
     ;           : also have string parsing function, \ trigger escape sequence
     ;           : \\ will print '\', while \a# where # is a number from 0-F will change background color
@@ -328,24 +329,24 @@ vga_print_string32:
     cmp     al, 13
     je      .carriage_return    ; some type writer stuff, aint born in this period
     
-    push    dx                  ; we tecnically dont have to do this cause i write my function to be respondsible for perserving
-    push    esi                 ; this mistake cost me 3 hours of my life
-    push    edi
+    push    rdx                  ; we tecnically dont have to do this cause i write my function to be respondsible for perserving
+    push    rsi                 ; this mistake cost me 3 hours of my life
+    push    rdi
 
     mov     ah, dh              ; moving color into ah
     xor     edi, edi            ; I actually should make a documentation...
-    call    vga_print_char32        ; if even the author is confused by his own function
+    call    vga_print_char64        ; if even the author is confused by his own function
                                 ; i cant begin to imagine the nightmare other potential contributor will have
 
 
     mov     eax, -1             ; it basically just 0xFFFFFFFF
-    xor     al, al              ; this is preparing confusing argument for vga_move_cursor...
+    xor     al, al              ; this is preparing confusing argument for vga_move_cursor_64...
     mov     ah, 1
-    call    vga_move_cursor
+    call    vga_move_cursor_64
 
-    pop     edi
-    pop     esi
-    pop     dx
+    pop     rdi
+    pop     rsi
+    pop     rdx
     jmp     .loop
 
     .escape_sequence:
@@ -361,18 +362,18 @@ vga_print_string32:
 
     .backslash_handling:
     ; print backslash
-    push    dx
-    push    esi
+    push    rdx
+    push    rsi
     mov     al, 92
     mov     ah, dh
     xor     edi, edi
-    call    vga_print_char32
+    call    vga_print_char64
     mov     eax, -1
     xor     al, al
     mov     ah, 1
-    call    vga_move_cursor
-    pop     esi
-    pop     dx
+    call    vga_move_cursor_64
+    pop     rsi
+    pop     rdx
 
     add     esi, 1              ; incriment our char pointer to skip "\\"
     jmp     .loop
@@ -380,7 +381,7 @@ vga_print_string32:
     .bg_color:
     mov     cl, byte [esi+1]
     mov     al, cl
-    call    vga_convert_ascii2int   ; int in ax
+    call    vga_convert_ascii2int_64   ; int in ax
     shl     ax, 4               ; shift 4 bit (mul 16) 
     and     dh, 0x0F            ; clear upper bit of ah, atp only upper 4 bits exist in cl
     or      dh, al              ; merge them
@@ -390,7 +391,7 @@ vga_print_string32:
     .fg_color:
     mov     cl, byte [esi+1]
     mov     al, cl
-    call    vga_convert_ascii2int
+    call    vga_convert_ascii2int_64
     and     dh, 0xF0           ; clear lower bits
     or      dh, al             ; merge higher ah and lower cl 
     add     esi, 2
@@ -400,21 +401,21 @@ vga_print_string32:
     mov     eax, -1
     mov     al, 1
     xor     ah, ah
-    call    vga_move_cursor
+    call    vga_move_cursor_64
     jmp     .loop
     
     .carriage_return:
     xor     eax, eax            ; absolute mode
     mov     al, [current_row] 
     mov     ah, 0
-    call    vga_move_cursor         ; current row, col = 0
+    call    vga_move_cursor_64         ; current row, col = 0
     jmp     .loop
 
     .done: 
     popf
     ret
 
-vga_convert_ascii2int:
+vga_convert_ascii2int_64:
     ; purpose: convert ascii (0 to 9 & a to z & A to Z) to raw integer based on hex
     ; input: al <- ASCII
     ; output: al
@@ -428,41 +429,3 @@ vga_convert_ascii2int:
 .is_digit:
     sub     al, 0x30
     ret
-
-
-VGA_buffer_base     equ     0xb8000
-row_limit           equ     24
-col_limit           equ     79
-
-current_row         db      0x00000
-current_col         db      0x00000
-vga_control_flag    db      0
-
-; Foreground Colors
-FG_BLACK            equ     0x00
-FG_BLUE             equ     0x01
-FG_GREEN            equ     0x02
-FG_CYAN             equ     0x03
-FG_RED              equ     0x04
-FG_MAGENTA          equ     0x05
-FG_BROWN            equ     0x06
-FG_LIGHT_GRAY       equ     0x07
-FG_DARK_GRAY        equ     0x08
-FG_LIGHT_BLUE       equ     0x09
-FG_LIGHT_GREEN      equ     0x0A
-FG_LIGHT_CYAN       equ     0x0B
-FG_LIGHT_RED        equ     0x0C
-FG_LIGHT_MAGENTA    equ     0x0D
-FG_YELLOW           equ     0x0E
-FG_WHITE            equ     0x0F
-
-; Background Colors
-BG_BLACK            equ     0x00
-BG_BLUE             equ     0x10
-BG_GREEN            equ     0x20
-BG_CYAN             equ     0x30
-BG_RED              equ     0x40
-BG_MAGENTA          equ     0x50
-BG_BROWN            equ     0x60
-BG_LIGHT_GRAY       equ     0x70
-BG_BLINKING         equ     0x80 ; this add blinking, need to do a ADD
