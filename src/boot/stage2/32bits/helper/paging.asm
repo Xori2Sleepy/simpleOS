@@ -3,9 +3,19 @@
 ; boot-time page table for 64 bits, throw away later when kernel load
 ; page need alignment
 
-PML4    equ      0x90000
-PDPT    equ      0x91000
-PD      equ      0x92000
+PML4    equ      0x80000
+PDPT    equ      0x81000
+PD      equ      0x82000
+
+;align 4096
+;PML4:
+;    times   512     dq      0
+;align 4096
+;PDPT:
+;    times   512     dq      0
+;align 4096
+;PD:
+;    times   512     dq      0
 
 check_long_mode_paging:
     call    kernel_analyze_long_mode_32
@@ -19,11 +29,11 @@ check_long_mode_paging:
     call    check_long_mode_paging_avaliable
     jc      .unavaliable
 
-    mov     edi, [PML4]
+    mov     edi, PML4
     call    clear_page
-    mov     edi, [PDPT]
+    mov     edi, PDPT
     call    clear_page
-    mov     edi, [PD]
+    mov     edi, PD
     call    clear_page
 
     mov     edi, msg_page_buffer_clear
@@ -60,6 +70,7 @@ check_long_mode_paging:
     ret
 
 clear_page:
+    cld
     ; input: page pointer in EDI
     xor     eax, eax
     mov     ecx, 1024       ; 4096/4
@@ -83,7 +94,7 @@ page_link:
     mov     eax, PDPT
     or      eax, 11b            ; Present | Writable
     mov     [PML4], eax
-    mov     dword [PML4 + 4], 0 ; next entry is 0
+    mov     dword [PML4 + 4], 0
 
     mov     eax, PD
     or      eax, 11b
@@ -121,11 +132,11 @@ page_link:
 ; bit 63 <- NX (No execute) <- 1 = cannot execute instructions ; for permission management
 
 page_load:
+    mov     eax, cr4            ; bits 5 PAE bits (extend 32 bits physical address bus to 36 bit)
+    or      eax, 1 << 5         ; because it address is now 36 it cant fit inside 32 bit page entries
+    mov     cr4, eax            ; so page entries is double to 64 bits ; page table remain 4kb in size so instead
+                                ; another stucture, PDPT is introduced to allow full address coverage 
     mov     eax, PML4
     mov     cr3, eax            ; cr3 hold root page table (page directory) address
 
-    mov     eax, cr4            ; bits 5 PAE bits (extend 32 bits physical address bus to 36 bit)
-    or      eax, 32             ; because it address is now 36 it cant fit inside 32 bit page entries
-    mov     cr4, eax            ; so page entries is double to 64 bits ; page table remain 4kb in size so instead
-                                ; another stucture, PDPT is introduced to allow full address coverage 
     ret
