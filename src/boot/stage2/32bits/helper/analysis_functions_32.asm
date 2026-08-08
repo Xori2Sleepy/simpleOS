@@ -1,5 +1,7 @@
 [bits 32]
 
+; kernel analysis shit
+
 kernel_analyze_long_mode_32:
     push    eax
     mov     eax, [kernel_info.header_version] ; version 

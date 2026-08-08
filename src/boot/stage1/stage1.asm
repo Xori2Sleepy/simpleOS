@@ -1,22 +1,20 @@
 [bits 16]   
 [org 0x7c00]
 ; basic stage one bootloader, really small and basic
-; somehow it smaller than i expected even with the long string
 start:
     cli
     mov     [boot_drive], dl
     xor     ax, ax
-    ; clear segment data to zero!
     mov     ds, ax
     mov     es, ax
     mov     ss, ax
-    mov     sp, 0x7C00          ; Set stack pointer below the code, safe zone
+    mov     sp, 0x7C00
     sti 
 
     ; printing message, here for testing
     mov     si, msg
     call    print_loop
-    mov     al, 10              ; nl
+    mov     al, 10
     call    print_char
 
 sector_load:
@@ -59,7 +57,7 @@ sector_load:
 
 disk_error:
     mov     si, msg_disk_er
-    call    print_loop          ; print error message
+    call    print_loop
     
     ; print first
     mov     al, ah              ; ah contain error code
@@ -74,9 +72,9 @@ disk_error:
     xlat
     call    print_char
 
-    mov     al, 13              ; line feed
+    mov     al, 13
     call    print_char
-    mov     al, 10              ; NL
+    mov     al, 10
     call    print_char
 
     xor     ax, ax              ; error code gone, ax = 0 for disk reset
@@ -131,9 +129,9 @@ print_loop:
     ; clobbered regs: NA
     pushf
     push    ax
-    cld                         ; we uses lodsb to print stuff so we need to clear df. Just to make sure!
+    cld
 .loop:
-    lodsb                       ; Load next byte from SI into AL
+    lodsb
     cmp     al, 0
     je      .done
     call    print_char          ; BIOS teletype function

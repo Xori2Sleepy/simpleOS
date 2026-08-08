@@ -23,7 +23,7 @@ disk_check_extensions:
     ret
 
 ; -------------------- kernel load -------------------- 
-kernel_load:
+kernel_header_load:
     dec     byte [disk_trial_counter]
     jz      .kernel_load_failed
 
@@ -38,7 +38,7 @@ kernel_load:
     int     13h
     jnc     .success
     call    disk_error
-    jmp     kernel_load
+    jmp     kernel_header_load
 
 .chs:
     mov     ah, [kernel_dap.sector_ad]
@@ -53,7 +53,7 @@ kernel_load:
     int     13h
     jnc     .success
     call    disk_error
-    jmp     kernel_load
+    jmp     kernel_header_load
 
 .success:
     mov     si, msg_disk_success
@@ -115,48 +115,93 @@ kernel_header_read:
     call    print_loop
     call    halt        ; fatal error
     ret
-; -------------------- header analysis -------------------- 
-kernel_analyze_graphic:
-    ; input: NA
-    ; output: carry (on = request graphic, off = no request for graphic)
-    ; clobbered: eflags ; eax
-    mov     eax, [kernel_info.header_version] ; version 
-    shr     eax, 24     ; checking major version
-    test    eax, eax    ; unreleased major 0
-    je      .major0
-    ret 
-.major0:
-    mov     eax, [kernel_info.flags]
-    and     eax, 1      ; isolate bits 0 : graphic
-    test    eax, eax
-    je      .m0_gOFF
-.m0_gON:
-    stc
-    ret
-.m0_gOFF:
-    clc
+
+; -------------------- search memory -------------------- 
+search_avaliable:
+    ; input: sizes in edi:esi
+    ; output: entry offset in eax (or all 1s if no valid zone is found)
+    xor     eax, eax
+    xor     edx, edx
+    xor     ecx, ecx
+
+    mov     ebx, [boot_info.entry_count]
+    mov     eax, ebx
+    shl     ebx, 1
+    add     ebx, eax
+    shl     ebx, 3
+
+.search_loop:
+    cmp     ecx, ebx
+    jae     .none_found
+
+    cmp     [ecx + boot_info.memory_map + 16], 1  ; type 1 usable ram
+    jne     .next_entry
+
+    mov     edx, [ecx + boot_info.memory_map +  12]
+    mov     eax, [ecx + boot_info.memory_map +  8]
+
+    push    esi
+    push    edi
+    push    eax
+    push    edx
+
+    mov     edx, [ecx + boot_info.memory_map + 4]
+    mov     eax, [ecx + boot_info.memory_map]
+
+    cmp     edx, 0x00000000
+    ja      .skip_sub
+    cmp     edx, 0x00000000
+    jne     .do_adjustment
+    cmp     eax, 0x00100000
+    jae     .skip_sub
+
+.do_adjustment:
+
+    mov     edi, 0x00100000
+    mov     esi, 0x00000000
+
+    sub     edi, eax        ; give different between pointer and 1mb
+    sbb     esi, edx
+    
+    pop     edx             ; now those have size
+    pop     eax
+
+    sub     eax, edi
+    sbb     edx, esi
+    jmp     .check_size_ready
+
+.skip_sub:
+    pop     edx
+    pop     eax
+
+.check_size_ready:
+    pop     edi
+    pop     esi
+    ; fall here if more than 1mb
+    cmp     edx, edi
+    jbe     .next_entry     ; if it equal exactly then it too dangerous to use
+    cmp     eax, esi
+    jbe     .next_entry
+
+    ; fall here if found
+    mov     si, msg_valid_memory
+    call    print_loop
+    mov     eax, ecx        ; return in eax
     ret
 
-kernel_analyze_long_mode:
+.next_entry:
+    add     ecx, 24
+    jmp     .search_loop
 
-    mov     edi, msg_welcome32
-    mov     esi, 0x0
-    mov     edx, 0xF
-    call    terminal_print_string32
+.none_found:
+    mov     eax, -1
+    ret
+    
+; -------------------- header load -------------------- 
+kernel_load:
+    call    kernel_analyze_kernel_reallocatable
+    jc      .search
 
-    mov     eax, [kernel_info.header_version] ; version 
-    shr     eax, 24     ; checking major version
-    test    eax, eax    ; unreleased major 0
-    je      .major0
-    ret
-.major0:
-    mov     eax, [kernel_info.flags]
-    and     eax, 1 << 1 ; isolate bits 1 : long_mode
-    test    eax, eax
-    je      .m0_gOFF
-.m0_gON:
-    stc
-    ret
-.m0_gOFF:
-    clc
-    ret
+.search:
+    mov     esi, 
+    call    search_avaliable
