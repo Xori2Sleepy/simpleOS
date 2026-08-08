@@ -197,11 +197,86 @@ search_avaliable:
     mov     eax, -1
     ret
     
+; -------------------- sector load -------------------- 
+load_sector:
+    ; input: edi <- load address ; input esi <- buffer
+    ; load stuff in a loop
+    push    edi
+    mov     esi, kernel_dap
+    mov     edi, scratchpad ; copy to scratch pad
+    mov     ecx, [kenrel_dap.dap_size]
+    rep     movsb
+    pop     edi
+
+    mov     word [scratchpad + 2], 32    ; load 32 sector at a time
+    mov     word [scratchpad + 4], edi   ; dest
+
+    call    disk_check_extensions
+    jc      .chs
+
+.lba:
+    ; compute sector to eax
+    mov     eax, [kernel_info.image_size]
+    mov     ecx, eax
+    shr     eax, 9          ; 2 ^ 9 = 512
+    test    ecx, 0x1ff      ; bit shifted
+    jz      .exact          ; no remainder
+    inc     eax             ; if nz mean remainder, so add 1 sector
+    
+.exact:
+    ; compute chuck (32 sector for lba) to load in eax
+    mov     ecx, eax
+    shr     eax, 5
+    and     ecx, 31         ; for extra load
+
+.perfect_chuck:
+    test     eax, eax
+    jz      .lba_done
+
+    push    eax
+    mov     ah, 42h
+    mov     dl, [boot_info.boot_drive]
+    mov     si, scratcpad 
+    int     13h
+ ;   jc      .error_stop
+    pop     eax
+
+    dec     eax
+    add     word [scratchpad + 6], 0x400     ; 32 * 512 / 16 = 0x400
+    add     word [scratchpad + 8], 32        ; sector ad, in qword but doesnt matter
+    jmp     .perfect_chuck
+
+.lba_done: 
+    test    ecx, ecx
+    jz      .done
+    mov     word [scratchpad + 2], ecx    ; load extra sectors
+    mov     ah, 42h
+    mov     dl, [boot_info.boot_drive]
+    mov     si, scratcpad 
+    int     13h
+ ;  jc      .error_stop
+.done
+    mov     si, msg_kernel_sector_load_success
+    call    print_loop
+    
+.chs:
 ; -------------------- header load -------------------- 
 kernel_load:
     call    kernel_analyze_kernel_reallocatable
     jc      .search
 
 .search:
-    mov     esi, 
+    mov     esi, [kernel_info.image_size]
+    mov     edi, [kernel_info.image_size + 4]
     call    search_avaliable
+    cmp     eax, -1
+    je      .cant_load_fatal_error
+
+
+.load_loop:
+
+.cant_load_fatal_error:
+    mov     si, msg_load_failed
+    call    print_loop
+    call    halt
+    hlt     ; here just in case

@@ -52,6 +52,8 @@ msg_disk_failed     db      "   Disk read error! Error code: ", 0
 msg_kernel_load_success db  "   Kernel header succesfully loaded", 13, 10, 0
 msg_kernel_load_failed  db  "   Kernel header fail to load. Continuing with execution...", 13, 10, 0
 msg_valid_memory    db      "   Valid memory found: loading full kernel...", 13, 10, 0
+msg_load_failed     db      "   CRITICAL: Can not identify a valid memory zone for kenel image! Halting the CPU!", 13, 10, 0
+msg_kernel_sector_load_success     db      "   Kernel fully loaded!", 13, 10, 0
 
 ; kernel read n stuff
 msg_unrecognized_magic  db  "   Unrecognized magic: kernel header could not be parsed", 13, 10, 0
