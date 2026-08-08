@@ -2,7 +2,6 @@
 [org 0x7E00]
 ; --------------- MAIN FUCNTION (basically) --------------- 
 stage2_entry:
-    ; environmental setup, already did this in stage 1, but JUST TO MAKE SURE!
     cli
     xor     ax, ax
     mov     ds, ax
@@ -32,15 +31,15 @@ stage2_entry:
     call    print_loop
     call    memory_map_sanitation
 
-    mov     si, msg_attempt_kernel_load
+    mov     si, msg_attempt_header_load
     call    print_loop
-    call    kernel_load
+    call    kernel_header_load
 
     mov     si, msg_attempt_header_read
     call    print_loop
     call    kernel_header_read
 
-    ; coming for 32 mode. finally, I have escape the shackle of 16 bits programing!
+
     cli
     in      al, 0x70            ; Read current CMOS state
     or      al, 0x80            ; Set bit 7 to mask NMIs
@@ -57,7 +56,7 @@ stage2_entry:
 
     mov     si, msg_gdt
     call    print_loop
-    mov     si, msg_far_jump    ; print stuff before interupt cant be call!
+    mov     si, msg_far_jump
     call    print_loop
 
 jmp32:
@@ -74,6 +73,7 @@ jmp32:
 %include "src/boot/stage2/16bits/helper/structure_and_table.asm"
 %include "src/boot/stage2/16bits/helper/16bits_message.asm"
 %include "src/boot/stage2/16bits/helper/vbe.asm"
+%include "src/boot/stage2/16bits/helper/analysis_functions_16.asm"
 
 ; --------------- small halt functions ---------------
 halt:

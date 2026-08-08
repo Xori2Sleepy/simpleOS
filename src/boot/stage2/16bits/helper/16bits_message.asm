@@ -51,6 +51,7 @@ msg_disk_success    db      "   Disk read success", 13, 10, 0
 msg_disk_failed     db      "   Disk read error! Error code: ", 0
 msg_kernel_load_success db  "   Kernel header succesfully loaded", 13, 10, 0
 msg_kernel_load_failed  db  "   Kernel header fail to load. Continuing with execution...", 13, 10, 0
+msg_valid_memory    db      "   Valid memory found: loading full kernel...", 13, 10, 0
 
 ; kernel read n stuff
 msg_unrecognized_magic  db  "   Unrecognized magic: kernel header could not be parsed", 13, 10, 0
@@ -61,7 +62,7 @@ msg_attempt_a20     db      "Attempting to enable A20: ", 0
 msg_attempt_e820    db      "Attempting to build memory map: ", 0
 msg_attempt_cpuid   db      "Attempting to fetch data from CPUID: ", 13, 10, 0
 msg_attempt_vbe     db      "Attempting to acticate VBE graphic: ", 13, 10, 0
-msg_attempt_kernel_load     db      "Attempting to load kernel header: ", 13, 10, 0
+msg_attempt_header_load     db      "Attempting to load kernel header: ", 13, 10, 0
 msg_attempt_header_read     db      "Attempting to read kernel header: ", 13, 10, 0
 msg_attempt_sanitation      db      "Attempting to sanitize memory map: ", 13, 10, 0
 

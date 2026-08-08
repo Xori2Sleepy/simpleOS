@@ -71,7 +71,7 @@ kernel_info:
     .kernel_version     dw      0           ; kernel version
     .kernel_name        dd      0
     .load_address       dd      0
-    .image_size         dd      0
+    .image_size         dq      0
 
     .check_sum          dd      0
 

@@ -58,7 +58,7 @@ halt32:
     jmp     .halt_loop
 
 
-%include "src/boot/stage2/32bits/helper/analysis_functions.asm"
+%include "src/boot/stage2/32bits/helper/analysis_functions_32.asm"
 %include "src/boot/stage2/32bits/helper/vga_driver.asm"
 %include "src/boot/stage2/32bits/helper/graphic_driver.asm"
 %include "src/boot/stage2/32bits/helper/terminal_interface.asm"

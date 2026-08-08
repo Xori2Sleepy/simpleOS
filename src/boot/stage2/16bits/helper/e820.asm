@@ -138,7 +138,7 @@ memory_map_merge:
 
 .merge_loop:
     cmp     ecx, edx
-    jge     .done
+    jae     .done
 
     push    edx
     push    ecx
@@ -184,7 +184,6 @@ memory_map_merge:
 ; ------------------ E820 sort ------------------
 memory_map_sort:
     ; Sorting algorithm in assembly? DEAR GOD
-    ; Optimization is not a thing here, prirority is the perserve my sanity
     ; input: NA
     ; output: NA
     ; clobbered: just assume it perserve none of the general regs and eflag
@@ -273,7 +272,7 @@ compare_map_left_index_less_than:
     sub     eax, 24
     cmp     edi, dword [boot_info.memory_map + eax]      ; pointer to left of current index position now
 .compare:
-    jl      .less_than
+    jb      .less_than
     pop     eax
     pop     edi
     clc

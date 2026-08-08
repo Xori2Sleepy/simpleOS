@@ -3,12 +3,12 @@
 kernel_header:
     .magic              dd      "QADB"
     .header_version     dd      0
-    .header_size        dw      68
+    .header_size        dw      80
 
     .kernel_version     dw      0
     .kernel_name        dd      0
-    .load_address       dd      0
-    .image_size         dd      0
+    .load_address       dd      0x100000
+    .image_size         dq      0
 
     .check_sum          dd      0
 

@@ -120,7 +120,7 @@ vbe_4f00:
 
     mov     ax, [boot_info.vbe_version]    ; hold version info
     cmp     ah, 2
-    jl      .old_vbe
+    jb      .old_vbe
 
     pop     di
     pop     es
@@ -206,7 +206,7 @@ vbe_4f01:
     
     mov     ax, [selected_priority_rank]        ; first see if resolution found is higher priority or not
     cmp     bx, ax                              ; less than = higher priority
-    jge     .next_priority
+    jae     .next_priority
     
     ; this update our selected mode
     mov     cx, [es:di]
