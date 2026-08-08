@@ -197,11 +197,76 @@ search_avaliable:
     mov     eax, -1
     ret
     
+; -------------------- sector load -------------------- 
+load_sector:
+    ; input: edi <- dap pointer ; esi <- load address
+    ; load stuff in a loop
+
+    push    edi
+    push    esi
+    mov     esi, kernel_dap
+    mov     edi, scratchpad ; copy to scratch pad
+    mov     ecx, [kenrel_dap.dap_size]
+    rep     movsb
+    pop     esi
+    pop     edi
+
+    mov     word [scratchpad + 2], 32    ; load 32 sector at a time
+    mov     word [scratchpad + 4], esi   ; dest
+
+    call    disk_check_extensions
+    jc      .chs
+
+.lba:
+    ; compute sector to eax
+    mov     eax, [kernel_info.image_size]
+    mov     ecx, eax
+    shr     eax, 9          ; 2 ^ 9 = 512
+    test    ecx, 0x1ff      ; bit shifted
+    jz      .exact          ; no remainder
+    inc     eax             ; if nz mean remainder, so add 1 sector
+    
+.exact:
+    ; compute chuck (32 sector for lba) to load in eax
+    mov     ecx, eax
+    shr     eax, 5
+    test    ecx, 0x11111
+    jz      .perfect_chuck
+    ; need extra load
+
+.perfect_chuck:
+    test     eax, eax
+    jz      .lba_done
+
+    mov     ah, 42h
+    mov     dl, [boot_info.boot_drive]
+    mov     si, scratcpad 
+    int     13h
+    jc      .error_stop
+
+    dec     eax
+    add     [scratchpad + 4], 32
+    jmp     .perfect_chuck
+
+ .lba_done: 
+
+.chs:
 ; -------------------- header load -------------------- 
 kernel_load:
     call    kernel_analyze_kernel_reallocatable
     jc      .search
 
 .search:
-    mov     esi, 
+    mov     esi, [kernel_info.image_size]
+    mov     edi, [kernel_info.image_size + 4]
     call    search_avaliable
+    cmp     eax, -1
+    je      .cant_load_fatal_error
+
+.load_loop:
+
+.cant_load_fatal_error:
+    mov     si, msg_load_failed
+    call    print_loop
+    call    halt
+    hlt     ; here just in case
