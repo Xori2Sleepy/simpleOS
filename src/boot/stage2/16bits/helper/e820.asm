@@ -134,6 +134,8 @@ memory_map_sanitation:
 memory_map_merge:
     xor     ecx, ecx        ; counter for looping
     mov     edx, [boot_info.entry_count]
+    test    edx, edx
+    jz      .done           ; if entry is, we are done
     dec     edx
 
 .merge_loop:
@@ -147,19 +149,23 @@ memory_map_merge:
     shl     cx, 1
     add     cx, ax
     shl     cx, 3       ; cx to offset
+
     mov     eax, [boot_info.memory_map + ecx]       ; lower half base
-    add     eax, dword [boot_info.memory_map + ecx + 8]     ; add lower length
     mov     edx, [boot_info.memory_map + ecx + 4]   ; higher half base
-    adc     edx, dword [boot_info.memory_map + ecx + 12]    ; higher half length
-    cmp     eax, dword [boot_info.memory_map + ecx + 24]    ; compare to lower base address of next
+    add     eax, [boot_info.memory_map + ecx + 8]     ; add lower length
+    adc     edx, [boot_info.memory_map + ecx + 12]    ; higher half length
+
+    cmp     eax,[boot_info.memory_map + ecx + 24]    ; compare to lower base address of next
     jne     .not_equal
-    cmp     edx, dword [boot_info.memory_map + ecx + 28]    ; compare to upper base address of next
+    cmp     edx, [boot_info.memory_map + ecx + 28]    ; compare to upper base address of next
     jne     .not_equal
+
 .equal:
     ; after basic address check, compare type and extended attribute
     mov     eax, [boot_info.memory_map + ecx + 16]  ; it 4 byte long
     cmp     eax, [boot_info.memory_map + ecx + 40]  ; compare type
     jne     .not_equal
+
     mov     eax, [boot_info.memory_map + ecx + 20]
     cmp     eax, [boot_info.memory_map + ecx + 44]  ; compare extended attribute
     jne     .not_equal
@@ -229,7 +235,7 @@ memory_map_sort:
 
 .shift:
     mov     di, ax
-    dec     ax                  ; i heard sub is more efficient but it virtually no different in modern system
+    dec     ax
     mov     si, ax
     push    ax
     call    copy_map_entry     ; copying left to current index
@@ -252,6 +258,7 @@ memory_map_sort:
 ; ---------- HELPER FUNCTION ----------
 compare_map_left_index_less_than:
     ; fuck 16 bits mode, we can only uses eax so we cant compare qword normally
+    ; input: di
     push    edi
     push    eax
     push    ecx
@@ -262,11 +269,11 @@ compare_map_left_index_less_than:
     shl     di, 3       ; 3 * 8 = 24
 
     xor     eax, eax
-    mov     eax, edi
+    movzx   eax, di
     ; compare current with left
     mov     edi, dword [boot_info.memory_map + eax + 4]  ; top bits of base address
     sub     eax, 24      ; element to the left
-    cmp     ebx, dword [boot_info.memory_map + eax + 4]
+    cmp     edi, dword [boot_info.memory_map + eax + 4]
     jne     .compare
     add     eax, 24
     mov     edi, dword [boot_info.memory_map + eax]
@@ -377,11 +384,13 @@ merge_adjacent_map_entry:
     mov     ax, di
     shl     di, 1
     add     di, ax
-    shl     di, 3
+    shl     di, 3           ; *24
+
     mov     eax, [boot_info.memory_map + edi + 8]
     add     eax, [boot_info.memory_map + edi + 32]
     mov     edx, [boot_info.memory_map + edi + 12]
     adc     edx, [boot_info.memory_map + edi + 36]
+
     mov     [boot_info.memory_map + edi + 8], eax
     mov     [boot_info.memory_map + edi + 12], edx
     pop     edi
