@@ -254,6 +254,7 @@ compare_map_left_index_less_than:
     ; fuck 16 bits mode, we can only uses eax so we cant compare qword normally
     push    edi
     push    eax
+    push    ecx
     ; input: current index in edi
     mov     ax, di
     shl     di, 1
@@ -273,11 +274,13 @@ compare_map_left_index_less_than:
     cmp     edi, dword [boot_info.memory_map + eax]      ; pointer to left of current index position now
 .compare:
     jb      .less_than
+    pop     ecx
     pop     eax
     pop     edi
     clc
     ret
 .less_than:
+    pop     ecx
     pop     eax
     pop     edi
     stc
@@ -297,6 +300,7 @@ copy_map_entry:
     shl     si, 1
     add     si, ax      ; *3
     shl     si, 3       ; 3 * 8 = 24
+
     mov     ax, di
     shl     di, 1
     add     di, ax      ; *3
@@ -328,7 +332,7 @@ copy_map_to_temp:
     add     si, ax
     shl     si, 3       ; 3 * 8 = 24
     add     si, boot_info.memory_map
-    add     di, scratchpad
+    mov     di, scratchpad
     mov     ecx, 6      ; double word * 6 = 24 byte
     rep     movsd
 
@@ -350,7 +354,7 @@ copy_map_from_temp:
     shl     di, 1
     add     di, ax
     shl     di, 3       ; 3 * 8 = 24
-    add     si, scratchpad
+    mov     si, scratchpad
     add     di, boot_info.memory_map
     mov     ecx, 6      ; double word * 6 = 24 byte
     rep     movsd

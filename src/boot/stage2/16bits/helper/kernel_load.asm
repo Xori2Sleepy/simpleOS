@@ -198,68 +198,164 @@ search_avaliable:
     ret
     
 ; -------------------- sector load -------------------- 
+
 load_sector:
-    ; input: edi <- load address ; input esi <- buffer
+    ; input: edi <- load address
     ; load stuff in a loop
     push    edi
     mov     esi, kernel_dap
     mov     edi, scratchpad ; copy to scratch pad
-    mov     ecx, [kenrel_dap.dap_size]
+    xor     ecx, ecx
+    mov     cl, byte [kernel_dap.dap_size]
     rep     movsb
     pop     edi
 
-    mov     word [scratchpad + 2], 32    ; load 32 sector at a time
-    mov     word [scratchpad + 4], edi   ; dest
+    mov     word [scratchpad + 2], 32      ; load 32 sector at a time
+    mov     word [scratchpad + 4], 0       ; hard coded buffer - to 0x84000 (16 kib)
+    mov     word [scratchpad + 6], 0x8000  ; hard coded buffer - to 0x84000 (16 kib)
 
     call    disk_check_extensions
     jc      .chs
 
 .lba:
-    ; compute sector to eax
+    ; compute sector to load to eax
     mov     eax, [kernel_info.image_size]
     mov     ecx, eax
     shr     eax, 9          ; 2 ^ 9 = 512
     test    ecx, 0x1ff      ; bit shifted
     jz      .exact          ; no remainder
     inc     eax             ; if nz mean remainder, so add 1 sector
-    
+
 .exact:
     ; compute chuck (32 sector for lba) to load in eax
+    ; remainding chuck in ecx
     mov     ecx, eax
     shr     eax, 5
     and     ecx, 31         ; for extra load
 
-.perfect_chuck:
+.chuck_loop:
     test     eax, eax
     jz      .lba_done
 
     push    eax
+    push    edi
+    push    ecx
     mov     ah, 42h
     mov     dl, [boot_info.boot_drive]
-    mov     si, scratcpad 
+    mov     si, scratchpad 
     int     13h
  ;   jc      .error_stop
+    pop     ecx
+    pop     edi
     pop     eax
 
+    ; need address in edi ; sector in esi
+    mov     esi, 32
+    call    load_chuck_to_higher_memory
+
     dec     eax
-    add     word [scratchpad + 6], 0x400     ; 32 * 512 / 16 = 0x400
+    add     edi, 0x4000     ; 32 * 512 = 0x4000
     add     word [scratchpad + 8], 32        ; sector ad, in qword but doesnt matter
-    jmp     .perfect_chuck
+    jmp     .chuck_loop
 
 .lba_done: 
     test    ecx, ecx
     jz      .done
-    mov     word [scratchpad + 2], ecx    ; load extra sectors
+    mov     word [scratchpad + 2], ax        ; load extra sectors
     mov     ah, 42h
     mov     dl, [boot_info.boot_drive]
-    mov     si, scratcpad 
+    mov     si, scratchpad 
     int     13h
  ;  jc      .error_stop
-.done
+    mov     esi, ecx
+    call    load_chuck_to_higher_memory
+
+.done:
     mov     si, msg_kernel_sector_load_success
     call    print_loop
-    
+    ret
+
 .chs:
+    ret
+    
+
+load_chuck_to_higher_memory:
+    ; input: destination in edi ; sector in esi
+    push    edi
+    push    ecx
+    shl     esi, 7      ; times 512 and divide 4 (<< 9 >> 2)
+    mov     ecx, esi    ; about of double word to move
+    mov     esi, 0x80000
+    rep     movsd
+    pop     ecx
+    pop     edi
+    ret
+    
+
+;load_sector:
+;    ; input: edi <- load address ; input esi <- buffer
+;    ; load stuff in a loop
+;    push    edi
+;    mov     esi, kernel_dap
+;    mov     edi, scratchpad ; copy to scratch pad
+;    mov     ecx, [kenrel_dap.dap_size]
+;    rep     movsb
+;    pop     edi
+;
+;    mov     word [scratchpad + 2], 32    ; load 32 sector at a time
+;    mov     word [scratchpad + 4], edi   ; dest
+;
+;    call    disk_check_extensions
+;    jc      .chs
+;
+;.lba:
+;    ; compute sector to eax
+;    mov     eax, [kernel_info.image_size]
+;    mov     ecx, eax
+;    shr     eax, 9          ; 2 ^ 9 = 512
+;    test    ecx, 0x1ff      ; bit shifted
+;    jz      .exact          ; no remainder
+;    inc     eax             ; if nz mean remainder, so add 1 sector
+;    
+;.exact:
+;    ; compute chuck (32 sector for lba) to load in eax
+;    mov     ecx, eax
+;    shr     eax, 5
+;    and     ecx, 31         ; for extra load
+;
+;.perfect_chuck:
+;    test     eax, eax
+;    jz      .lba_done
+;
+;    push    eax
+;    mov     ah, 42h
+;    mov     dl, [boot_info.boot_drive]
+;    mov     si, scratcpad 
+;    int     13h
+; ;   jc      .error_stop
+;    pop     eax
+;
+;    dec     eax
+;
+;    add     word [scratchpad + 6], 0x400     ; 32 * 512 / 16 = 0x400
+;    add     dword [scratchpad + 8], 32        ; sector ad, in qword but doesnt really matter
+;
+;    jmp     .perfect_chuck
+;
+;.lba_done: 
+;    test    ecx, ecx
+;    jz      .done
+;    mov     word [scratchpad + 2], ecx    ; load extra sectors
+;    mov     ah, 42h
+;    mov     dl, [boot_info.boot_drive]
+;    mov     si, scratcpad 
+;    int     13h
+; ;  jc      .error_stop
+;.done
+;    mov     si, msg_kernel_sector_load_success
+;    call    print_loop
+;.chs:
+
 ; -------------------- header load -------------------- 
 kernel_load:
     call    kernel_analyze_kernel_reallocatable
@@ -271,10 +367,16 @@ kernel_load:
     call    search_avaliable
     cmp     eax, -1
     je      .cant_load_fatal_error
-
-
-.load_loop:
-
+    
+    mov     edi, [eax + boot_info.memory_map + 4]
+    test    edi, edi
+    jz      .can_load   ; if not zero it mean this thing is more than 4gib, dont accept
+    ret
+.can_load:
+    mov     edi, [eax + boot_info.memory_map]
+    call    load_sector
+    ret
+    
 .cant_load_fatal_error:
     mov     si, msg_load_failed
     call    print_loop
