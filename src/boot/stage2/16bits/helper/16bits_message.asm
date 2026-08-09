@@ -67,6 +67,7 @@ msg_attempt_vbe     db      "Attempting to acticate VBE graphic: ", 13, 10, 0
 msg_attempt_header_load     db      "Attempting to load kernel header: ", 13, 10, 0
 msg_attempt_header_read     db      "Attempting to read kernel header: ", 13, 10, 0
 msg_attempt_sanitation      db      "Attempting to sanitize memory map: ", 13, 10, 0
+msg_attempt_sector_load     db      "Attempting to load full kernel image: ", 13, 10, 0
 
 ; cpuid stuff
 msg_cpuid_unavailable       db      "   CPUID: CPUID feature is unavailable, can not obtain nessary information: Halting CPU.", 13, 10, 0

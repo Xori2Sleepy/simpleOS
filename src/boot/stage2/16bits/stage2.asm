@@ -38,7 +38,10 @@ stage2_entry:
     mov     si, msg_attempt_header_read
     call    print_loop
     call    kernel_header_read
-
+    
+    mov     si, msg_attempt_sector_load
+    call    print_loop
+    call    kernel_load
 
     cli
     in      al, 0x70            ; Read current CMOS state
