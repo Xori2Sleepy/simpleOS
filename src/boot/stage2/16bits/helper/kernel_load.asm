@@ -150,19 +150,14 @@ search_avaliable:
 
     cmp     edx, 0x00000000
     ja      .skip_sub
-    cmp     edx, 0x00000000
-    jne     .do_adjustment
     cmp     eax, 0x00100000
     jae     .skip_sub
 
 .do_adjustment:
-
+    ; eax is below 1mb
     mov     edi, 0x00100000
-    mov     esi, 0x00000000
-
     sub     edi, eax        ; give different between pointer and 1mb
-    sbb     esi, edx
-    
+
     pop     edx             ; now those have size
     pop     eax
 
@@ -186,7 +181,8 @@ search_avaliable:
     ; fall here if found
     mov     si, msg_valid_memory
     call    print_loop
-    mov     eax, ecx        ; return in eax
+    
+    ; edx and eax should contain the pointer
     ret
 
 .next_entry:

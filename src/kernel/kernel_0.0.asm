@@ -8,7 +8,7 @@ kernel_header:
     .kernel_version     dw      0
     .kernel_name        dd      0
     .load_address       dd      0x100000
-    .image_size         dq      0
+    .image_size         dq      512
 
     .check_sum          dd      0
 
