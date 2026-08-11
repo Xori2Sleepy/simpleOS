@@ -49,11 +49,15 @@ msg_rs_success      db      "   Disk reset success!", 13, 10, 0
 msg_rs_failed       db      "   CRITICAL: Disk reset failed", 13, 10, 0
 msg_disk_success    db      "   Disk read success", 13, 10, 0
 msg_disk_failed     db      "   Disk read error! Error code: ", 0
-msg_kernel_load_success db  "   Kernel header succesfully loaded", 13, 10, 0
-msg_kernel_load_failed  db  "   Kernel header fail to load. Continuing with execution...", 13, 10, 0
 msg_valid_memory    db      "   Valid memory found: loading full kernel...", 13, 10, 0
-msg_load_failed     db      "   CRITICAL: Can not identify a valid memory zone for kenel image! Halting the CPU!", 13, 10, 0
-msg_kernel_sector_load_success     db      "   Kernel fully loaded!", 13, 10, 0
+msg_header_load_success db  "   Kernel header succesfully loaded", 13, 10, 0
+msg_header_load_failed  db  "   Kernel header fail to load. Continuing with execution...", 13, 10, 0
+msg_kernel_load_success     db      "   Kernel fully loaded!", 13, 10, 0
+msg_kernel_load_err_no_mem  db      "   CRITICAL: Can not identify a valid memory zone for kenel image! Halting the CPU!", 13, 10, 0
+msg_kernel_load_err_addr_below db   "   CRITICAL: Kernel load address in header is invalid! Halting the CPU!"
+msg_kernel_load_err_above_lim  db   "   CRITICAL: Valid load address found but it exist above 32 bits limit, "
+                               db   "please check kerenl_reallocatiable flag! Halting the CPU!", 13, 10, 0
+msg_kernel_load_err_invalid_addr    db   "   CRITICAL: Given address is invalid!"
 
 ; kernel read n stuff
 msg_unrecognized_magic  db  "   Unrecognized magic: kernel header could not be parsed", 13, 10, 0

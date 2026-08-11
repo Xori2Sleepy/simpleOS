@@ -70,7 +70,7 @@ kernel_info:
 
     .kernel_version     dw      0           ; kernel version
     .kernel_name        dd      0
-    .load_address       dd      0
+    .load_address       dq      0
     .image_size         dq      0
 
     .check_sum          dd      0
@@ -84,7 +84,7 @@ kernel_info:
     .required_cpu       dd      0           ; cpuid id shit
     .flags              dd      0           ; boot service flags
     ; flag: 0 vbe_graphic ; 1 long mode ; 2 frame buffer require ; 3 check sum ; 
-    ; flag: 4 higher half ; 5 kernel reallocatable
+    ; flag: 4 higher half ; 5 kernel reallocatable ; ... higher loading ...
 
     .minimum_memory     dq      0
     .preferred_bpp      dd      0           ; order is important,
@@ -167,6 +167,8 @@ boot_info:
     ;align 8
     ;.memory_map     times 64 * 24       db      0   ; 1536 byte
     .memory_map     equ     0x4000
+    .effective_load_address     dq      0   ; actual kernel loading address
+
 ; -------------------- CPUID TABLE --------------------
 CPUID_VENDOR_TABLE:
     ; AMD

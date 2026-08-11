@@ -58,13 +58,13 @@ kernel_header_load:
 .success:
     mov     si, msg_disk_success
     call    print_loop
-    mov     si, msg_kernel_load_success
+    mov     si, msg_header_load_success
     call    print_loop
 
     ret
 
 .kernel_load_failed:
-    mov     si, msg_kernel_load_failed
+    mov     si, msg_header_load_failed
     call    print_loop
 
     call    halt            ; fatal error
@@ -115,6 +115,31 @@ kernel_header_read:
     call    print_loop
     call    halt        ; fatal error
     ret
+
+; -------------------- valid memory? -------------------- 
+valid_address_check:
+    ; input: sizes in edi:esi
+    ; output: carry flag
+    xor     eax, eax
+    xor     edx, edx
+    xor     ecx, ecx
+
+    mov     ebx, [boot_info.entry_count]
+    mov     eax, ebx
+    shl     ebx, 1
+    add     ebx, eax
+    shl     ebx, 3
+
+.search_loop:
+    cmp     ecx, ebx
+    jae     .invalid
+
+.invalid:
+    mov     si, msg_kernel_load_err_invalid_addr
+    call    print_loop
+    stc
+    ret
+    
 
 ; -------------------- search memory -------------------- 
 search_avaliable:
@@ -198,6 +223,7 @@ search_avaliable:
     mov     eax, 0x00100000
     mov     edx, 0x00000000
 .skip_1mb:
+    clc
     ret
 
 .next_entry:
@@ -209,11 +235,13 @@ search_avaliable:
 
 .none_found:
     mov     eax, -1
+    mov     edx, -1
+    stc
     ret
     
 ; -------------------- sector load -------------------- 
 
-load_sector:
+load_sector_16:
     ; input: edi <- load address
     ; load stuff in a loop
     push    edi
@@ -285,7 +313,7 @@ load_sector:
     call    load_chuck_to_higher_memory
 
 .done:
-    mov     si, msg_kernel_sector_load_success
+    mov     si, msg_kernel_load_success
     call    print_loop
     ret
 
@@ -305,7 +333,6 @@ load_chuck_to_higher_memory:
     pop     edi
     ret
     
-
 ;load_sector:
 ;    ; input: edi <- load address ; input esi <- buffer
 ;    ; load stuff in a loop
@@ -371,28 +398,58 @@ load_chuck_to_higher_memory:
 ;.chs:
 
 ; -------------------- header load -------------------- 
-kernel_load:
+kernel_load_16:
     call    kernel_analyze_kernel_reallocatable
     jc      .search
+    
+    ; if it not reallocatable, we try loading given address
+    mov     eax, [kernel_info.load_address]
+    mov     edx, [kernel_info.load_address + 4]
+    
+    cmp     edx, 0x00000000
+    ja      .cant_load_above_limit    ; it is above 1mb but it hit limit
+    cmp     eax, 0x00100000
+    jb      .below_1mb
+
+    mov     edi, edx
+    mov     esi, eax
+    call    valid_address_check
+    jc      .cant_load_fatal_error
+
+    mov     edi, [kernel_info.load_address]
+    call    load_sector_16
+    ret
+
+.below_1mb:
+    mov     si, msg_kernel_load_err_addr_below
+    call    print_loop
+    call    halt
 
 .search:
     mov     esi, [kernel_info.image_size]
     mov     edi, [kernel_info.image_size + 4]
-    call    search_avaliable
-    cmp     eax, -1
-    je      .cant_load_fatal_error
+    call    search_avaliable        ; return in edx:eax
+    jc      .cant_load_fatal_error  ; carry mean fatal
     
-    mov     edi, [eax + boot_info.memory_map + 4]
-    test    edi, edi
-    jz      .can_load   ; if not zero it mean this thing is more than 4gib, dont accept
+    mov     [boot_info.effective_load_address], eax
+    mov     [boot_info.effective_load_address + 4], edx
+
+    test    edx, edx
+    jnz     .cant_load_above_limit  ; if not zero it mean this thing is more than 4gib, dont accept
     ret
+
 .can_load:
-    mov     edi, [eax + boot_info.memory_map]
-    call    load_sector
+    mov     edi, eax        ; if it reach here it meant it must be below 32 limits, so we good
+    call    load_sector_16
     ret
     
 .cant_load_fatal_error:
-    mov     si, msg_load_failed
+    mov     si, msg_kernel_load_err_no_mem
     call    print_loop
     call    halt
-    hlt     ; here just in case
+
+.cant_load_above_limit:
+    mov     si, msg_kernel_load_err_above_lim
+    call    print_loop
+    ; add some mechanicsm later
+    call    halt
