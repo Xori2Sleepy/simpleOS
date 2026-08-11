@@ -134,14 +134,15 @@ search_avaliable:
     cmp     ecx, ebx
     jae     .none_found
 
+    push    esi
+    push    edi
+
     cmp     [ecx + boot_info.memory_map + 16], 1  ; type 1 usable ram
     jne     .next_entry
 
-    mov     edx, [ecx + boot_info.memory_map +  12]
-    mov     eax, [ecx + boot_info.memory_map +  8]
+    mov     edx, [ecx + boot_info.memory_map + 12]
+    mov     eax, [ecx + boot_info.memory_map + 8]
 
-    push    esi
-    push    edi
     push    eax
     push    edx
 
@@ -155,11 +156,15 @@ search_avaliable:
 
 .do_adjustment:
     ; eax is below 1mb
+    xor     esi, esi
     mov     edi, 0x00100000
     sub     edi, eax        ; give different between pointer and 1mb
 
     pop     edx             ; now those have size
     pop     eax
+
+    cmp     eax, edi
+    jb      .next_entry     ; size < adjustment -> entire region is below 1mb, skip
 
     sub     eax, edi
     sbb     edx, esi
@@ -173,19 +178,32 @@ search_avaliable:
     pop     edi
     pop     esi
     ; fall here if more than 1mb
-    cmp     edx, edi
-    jbe     .next_entry     ; if it equal exactly then it too dangerous to use
-    cmp     eax, esi
-    jbe     .next_entry
+    cmp     edx, edi        ; edi is upper
+    jb      .next_entry_skip_pop
+    cmp     eax, esi        ; esi is lower
+    jbe     .next_entry_skip_pop
 
     ; fall here if found
     mov     si, msg_valid_memory
     call    print_loop
     
-    ; edx and eax should contain the pointer
+    mov     eax, [ecx + boot_info.memory_map]
+    mov     edx, [ecx + boot_info.memory_map + 4]
+
+    cmp     edx, 0x00000000
+    ja      .skip_1mb
+    cmp     eax, 0x00100000
+    jae     .skip_1mb
+
+    mov     eax, 0x00100000
+    mov     edx, 0x00000000
+.skip_1mb:
     ret
 
 .next_entry:
+    pop     edi
+    pop     esi
+.next_entry_skip_pop:
     add     ecx, 24
     jmp     .search_loop
 
