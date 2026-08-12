@@ -175,6 +175,8 @@ valid_address_check:
     jb      .invalid    ; allow equal
 
 .valid:
+    mov     si, msg_valid_memory
+    call    print_loop
     clc     ; all passed 
     ret
 
@@ -464,6 +466,9 @@ kernel_load_16:
     call    valid_address_check
     jc      .cant_load_fatal_error
 
+    mov     si, msg_kernel_load_success
+ ;   call    print_loop
+    xor     esi, esi
     mov     edi, [kernel_info.load_address]
     call    load_sector_16
     ret
@@ -484,9 +489,11 @@ kernel_load_16:
 
     test    edx, edx
     jnz     .cant_load_above_limit  ; if not zero it mean this thing is more than 4gib, dont accept
-    ret
 
 .can_load:
+    mov     si, msg_kernel_load_success
+    ;call    print_loop
+    xor     esi, esi
     mov     edi, eax        ; if it reach here it meant it must be below 32 limits, so we good
     call    load_sector_16
     ret
@@ -495,7 +502,6 @@ kernel_load_16:
     mov     si, msg_kernel_load_err_no_mem
     call    print_loop
     call    halt
-
 .cant_load_above_limit:
     mov     si, msg_kernel_load_err_above_lim
     call    print_loop
