@@ -134,6 +134,54 @@ valid_address_check:
     cmp     ecx, ebx
     jae     .invalid
 
+    cmp     dword [ecx + boot_info.memory_map + 16], 1
+    jne     .next_entry
+
+    mov     eax, [ecx + boot_info.memory_map]
+    mov     edx, [ecx + boot_info.memory_map + 4]
+
+    cmp     edi, edx    ; higher half
+    jb      .next_entry
+    ja      .base_ok
+
+    cmp     esi, eax    ; lower half
+    jb      .next_entry
+
+.base_ok:
+    add     eax, [ecx + boot_info.memory_map + 8]
+    adc     edx, [ecx + boot_info.memory_map + 12]
+
+    cmp     edi, edx
+    ja      .next_entry
+    jb      .end_ok
+
+    cmp     esi, eax
+    jae     .next_entry
+
+.end_ok:
+    ; if reach we know that this is our entry
+    sub     eax, esi    ; give different
+    sbb     edx, edi
+
+    mov     esi, [kernel_info.image_size]
+    mov     edi, [kernel_info.image_size + 4]
+
+    ; compare different to image size
+    cmp     edx, edi    ; eax and edx carry size
+    jb      .invalid
+    ja      .valid
+
+    cmp     eax, esi
+    jb      .invalid    ; allow equal
+
+.valid:
+    clc     ; all passed 
+    ret
+
+.next_entry:
+    add     ecx, 24
+    jmp     .search_loop
+
 .invalid:
     mov     si, msg_kernel_load_err_invalid_addr
     call    print_loop

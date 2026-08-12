@@ -19,7 +19,7 @@ kernel_header:
     .preferred_stack_top    dd      0
 
     .required_cpu       dd      0
-    .flags              dd      10b
+    .flags              dd      000010b
     ; flag: 0 vbe_graphic ; 1 long mode ; 2 frame buffer require ; 3 check sum ; 
     ; flag: 4 higher half ; 5 kernel reallocatable
     .minimum_memory     dq      0

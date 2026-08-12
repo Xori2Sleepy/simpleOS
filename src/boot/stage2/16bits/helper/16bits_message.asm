@@ -57,7 +57,7 @@ msg_kernel_load_err_no_mem  db      "   CRITICAL: Can not identify a valid memor
 msg_kernel_load_err_addr_below db   "   CRITICAL: Kernel load address in header is invalid! Halting the CPU!"
 msg_kernel_load_err_above_lim  db   "   CRITICAL: Valid load address found but it exist above 32 bits limit, "
                                db   "please check kerenl_reallocatiable flag! Halting the CPU!", 13, 10, 0
-msg_kernel_load_err_invalid_addr    db   "   CRITICAL: Given address is invalid!"
+msg_kernel_load_err_invalid_addr    db   "   CRITICAL: Given address is invalid!", 13, 10, 0
 
 ; kernel read n stuff
 msg_unrecognized_magic  db  "   Unrecognized magic: kernel header could not be parsed", 13, 10, 0
