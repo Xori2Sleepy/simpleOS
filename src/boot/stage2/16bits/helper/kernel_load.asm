@@ -16,9 +16,11 @@ disk_check_extensions:
     test    cx, 1           ; bit 0 is the extended disk access
     jz      .failed
 
+    mov     byte [boot_info.read_mode], 1
     clc
     ret
 .failed:
+    mov     byte [boot_info.read_mode], 0
     stc
     ret
 
@@ -28,7 +30,7 @@ kernel_header_load:
     jz      .kernel_load_failed
 
     mov     dl, [boot_info.boot_drive]
-    call    disk_check_extensions
+    call    disk_check_extensions       ; first time calling
     jc      .chs
 
 .lba:
@@ -306,12 +308,13 @@ load_sector_16:
     mov     word [scratchpad + 4], 0       ; hard coded buffer - to 0x84000 (16 kib)
     mov     word [scratchpad + 6], 0x8000  ; hard coded buffer - to 0x84000 (16 kib)
 
-    call    disk_check_extensions
-    jc      .chs
+    mov     al, [boot_info.read_mode]
+    test    al, al
+    je      .chs
 
 .lba:
     ; compute sector to load to eax
-    mov     eax, [kernel_info.image_size]
+    mov     eax, [kernel_info.image_size] 
     mov     ecx, eax
     shr     eax, 9          ; 2 ^ 9 = 512
     test    ecx, 0x1ff      ; bit shifted
@@ -353,11 +356,17 @@ load_sector_16:
 .lba_done: 
     test    ecx, ecx
     jz      .done
-    mov     word [scratchpad + 2], ax        ; load extra sectors
+    push    eax
+    push    edi
+    push    ecx
+    mov     word [scratchpad + 2], cx        ; load extra sectors
     mov     ah, 42h
     mov     dl, [boot_info.boot_drive]
     mov     si, scratchpad 
     int     13h
+    pop     ecx
+    pop     edi
+    pop     eax
  ;  jc      .error_stop
     mov     esi, ecx
     call    load_chuck_to_higher_memory
@@ -373,12 +382,41 @@ load_sector_16:
 
 load_chuck_to_higher_memory:
     ; input: destination in edi ; sector in esi
+    ; need ping pong ing 
     push    edi
     push    ecx
+    push    eax
+    push    ds
+    push    es
+
     shl     esi, 7      ; times 512 and divide 4 (<< 9 >> 2)
     mov     ecx, esi    ; about of double word to move
-    mov     esi, 0x80000
+
+    mov     ax, 0x8000
+    mov     ds, ax
+    mov     esi, 0x0
+
+    cmp     edi, 0x100000
+    jae     .above_1mb
+
+    ; below
+    mov     eax, edi
+    shr     eax, 4      ; divide by 16 to get segment base
+    mov     es, ax
+    and     edi, 0x000F ; clear upper bits only return 4 bits offset
+    jmp     .move
+
+.above_1mb:
+    mov     ax, 0xffff  ; force max
+    mov     es, ax
+    sub     edi, 0xffff0 ; subtract segment base from address
+
+.move:
     rep     movsd
+
+    pop     es
+    pop     ds
+    pop     eax
     pop     ecx
     pop     edi
     ret

@@ -116,6 +116,7 @@ boot_report             dq      0           ; flag and stuff
 boot_info:
     .boot_info_size     dq      0           ; fill later
     .boot_drive         db      0
+    .read_mode          db      0           ; 0 for chs and 1 for lba
     .entry_count        dd      0           ; for memory map
 
     .reserved       times 3     db      0   ; for alignment
