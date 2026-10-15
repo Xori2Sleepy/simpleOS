@@ -1,9 +1,16 @@
 [bits 32]
+
 ; Using system V ABI (it meant to be reused in kernel code which I plan to do cross compliling)
+; NVM let just keep it random abi, I will just fix it later.
+; Trash developer mentality ik but who cares, I am still in high school, prime time to make mistake
+
 ; NOTE: Code is not consistent here, some function support modular bpp, some dont. Also bits map print is not consistent
 draw_pixel:
     ; currently only 32 bpp supported
     ; input: x in edi ; input y in esi ; edx = color
+    cmp     byte [boot_info.vbe_bpp], 32
+    jne     .unsupported
+
     ; off set calculation 
     mov     al, [boot_info.vbe_bpp]
     shr     al, 3
@@ -18,6 +25,7 @@ draw_pixel:
     lea     eax, [edi + eax]
     ; move color into address
     mov     [eax], edx
+.unsupported:
     ret
 
 calculate_grid_data:
@@ -32,6 +40,11 @@ calculate_grid_data:
     add     esi, ecx
     mov     [vbe_info.true_grid_height], esi
 
+    test    edi, edi
+    jz      .bad
+    test    esi, esi
+    jz      .bad
+
     movzx   eax, word [boot_info.vbe_width]
     xor     edx, edx
     div     edi             ; EDX:EAX / EDI
@@ -44,6 +57,11 @@ calculate_grid_data:
     mov     [vbe_info.max_row], eax
     mov     [vbe_info.rem_y], edx
 
+    ret
+
+.bad:
+    mov     dword [vbe_info.max_col], 0
+    mov     dword [vbe_info.max_row], 0
     ret
 
 draw_char:
@@ -64,6 +82,11 @@ draw_char:
     mov     esi, [vbe_info.cursor_col]
 
 .absolute:
+    cmp     edi, [vbe_info.max_row]
+    jae     .done
+    cmp     esi, [vbe_info.max_col]
+    jae     .done
+
     push    edx
     mov     eax, [vbe_info.true_grid_height]
     xor     edx, edx
@@ -76,6 +99,7 @@ draw_char:
     mov     esi, eax
     pop     edx
 
+    movzx   edx, dl
     mov     edx, [ASCII_lookup_table + edx * 4]
     ; write to grid logic
     xor     ecx, ecx        ; row counter
@@ -141,15 +165,13 @@ draw_string:
     ; input: pointer in edi ; no mode -> if user want abs string print, remember old address and uses mov_cursor 
     ; output: NA
     ; clobbered:
+    cld
     push    ebx
     mov     ebx, [vbe_info.bg_color32]
     push    ebx
     mov     ebx, [vbe_info.fg_color32]
     push    ebx
     
-    mov     bx, [vbe_info.control_flag]
-    and     bx, 8           ; on = esc ; off = disable
-
     mov     esi, edi
     mov     ax, [vbe_info.control_flag]
     push    eax             ; function are responsible for control flag perservation
@@ -163,7 +185,7 @@ draw_string:
 
     cmp     edx, 0
     je      .done
-    test    bx, bx          ; esc seq bit
+    test    word [vbe_info.control_flag], 8     ; esc seq bit (on = esc ; off = disable)
     jz      .skip_esc
 
     cmp     edx, 92         ; if bit on esc seq can be detected
@@ -247,7 +269,11 @@ draw_string:
 .bg_color_handling:
     xor     eax, eax
     mov     al, [esi + 1]
+    test    al, al
+    jz      .done
     call    vbe_convert_ascii2int
+    cmp     al, 15
+    ja      .bad_color
     shl     eax, 2
     mov     edx, vbe_color_preset_table
     mov     edx, dword [edx + eax]
@@ -256,12 +282,21 @@ draw_string:
     jmp     .loop
 
 .fg_color_handling:
+    xor     eax, eax
     mov     al, [esi + 1]
+    test    al, al
+    jz      .done
     call    vbe_convert_ascii2int
+    cmp     al, 15
+    ja      .bad_color
     shl     eax, 2
     mov     edx, vbe_color_preset_table
     mov     edx, dword [edx + eax]
     mov     [vbe_info.fg_color32], edx
+    add     esi, 2
+    jmp     .loop
+
+.bad_color:
     add     esi, 2
     jmp     .loop
 
@@ -286,6 +321,7 @@ vbe_clear_screen:
     je      .clear24
     cmp     al, 16
     je      .clear16
+    ret
 
 .clear32:
     mov     eax, [vbe_info.bg_color32]
@@ -297,26 +333,50 @@ vbe_clear_screen:
 
 .clear24:
     ; write repeating BGR bytes
-    mov     al, [vbe_info.bg_color24]
-    mov     ah, [vbe_info.bg_color24 + 1]
-    mov     dl, [vbe_info.bg_color24 + 2]
+    push    ebx
+    mov     al, [vbe_info.bg_color32]
+    mov     ah, [vbe_info.bg_color32 + 1]
+    mov     dl, [vbe_info.bg_color32 + 2]
+    movzx   ebx, word [boot_info.vbe_height]    ; row counter
+
+.row24:
+    movzx   ecx, word [boot_info.vbe_width]     ; pixels in this row
+    push    edi                                 ; remember start of row
 
 .loop24:
-    cmp     ecx, 3
-    jb      .done24
-
     stosw
     mov     [edi], dl
     inc     edi
 
-    sub     ecx, 3
-    jmp     .loop24
+    dec     ecx
+    jnz     .loop24
+
+    pop     edi
+    movzx   ecx, word [boot_info.vbe_pitch]
+    add     edi, ecx                            ; next row start
+    dec     ebx
+    jnz     .row24
 
 .done24:
+    pop     ebx
     ret
 
 .clear16:
-    mov     ax, [vbe_info.bg_color16]
+    push    ebx
+    mov     eax, [vbe_info.bg_color32]
+    mov     edx, eax
+    shr     edx, 19         ; top 5 bits of red
+    and     edx, 0x1F
+    shl     edx, 11
+    mov     ebx, eax
+    shr     ebx, 10         ; top 6 bits of green
+    and     ebx, 0x3F
+    shl     ebx, 5
+    or      edx, ebx
+    shr     eax, 3          ; top 5 bits of blue
+    and     eax, 0x1F
+    or      eax, edx        ; ax = RGB565
+    pop     ebx
     shr     ecx, 1          ; div by 2 for word
     cld
     rep     stosw
@@ -352,6 +412,25 @@ vbe_normalized:
     mov     ecx, [vbe_info.max_row]
     mov     ebx, [vbe_info.max_col]
 
+    ;
+    test    ebx, ebx
+    jz      .done
+    test    ecx, ecx
+    jz      .done
+
+.negative_col:
+    test    esi, esi
+    jns     .negative_row
+    add     esi, ebx
+    dec     edi
+    jmp     .negative_col
+
+.negative_row:
+    test    edi, edi
+    jns     .normalize_col
+    xor     edi, edi
+    xor     esi, esi
+
 .normalize_col:
     cmp     esi, ebx
     jb      .normalize_row
@@ -370,6 +449,7 @@ vbe_normalized:
     pushad
     call    vbe_clear_screen
     popad
+    xor     edx, edx
 
 .skip_clear:
     sub     edi, ecx
@@ -380,16 +460,23 @@ vbe_normalized:
 vbe_convert_ascii2int:
     ; purpose: convert ascii (0 to 9 & a to z & A to Z) to raw integer based on hex
     ; input: al <- ASCII
-    ; output: al
+    ; output: al (0 - 15, or 0xFF if not a hex digit)
     ; clobered: flags, al
     cmp     al, '9'
     jbe     .is_digit           ; # come before letter, if it doesnt jmp it lettert
     
     or      al, 0x20            ; convert capital to lower
+    cmp     al, 'a'
+    jb      .invalid
+    cmp     al, 'f'
+    ja      .invalid
     sub     al, 0x57            
     ret
 .is_digit:
-    sub     al, 0x30
+    sub     al, 0x30            ; chars below '0' wrap to 0xD0+ so callers see a value above 15
+    ret
+.invalid:
+    mov     al, 0xFF
     ret
 
 vbe_color_preset_table:

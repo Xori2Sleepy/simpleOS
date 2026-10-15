@@ -2,11 +2,7 @@
 default abs
 
 long64_entry:
-
-    mov rax, 0x123456789ABCDEF0
-
-
-    ; print something
+    call    terminal_initialize_64
     mov     edi, msg_entry_64
     mov     esi, 0x0
     mov     edx, 0xf

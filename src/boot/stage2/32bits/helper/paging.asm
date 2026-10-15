@@ -3,9 +3,12 @@
 ; boot-time page table for 64 bits, throw away later when kernel load
 ; page need alignment
 
-PML4    equ      0x80000
-PDPT    equ      0x81000
-PD      equ      0x82000
+PML4    equ     0x80000
+PDPT    equ     0x81000
+PD0     equ     0x82000
+PD1     equ     0x83000
+PD2     equ     0x84000
+PD3     equ     0x85000
 
 ;align 4096
 ;PML4:
@@ -33,7 +36,13 @@ check_long_mode_paging:
     call    clear_page
     mov     edi, PDPT
     call    clear_page
-    mov     edi, PD
+    mov     edi, PD0
+    call    clear_page
+    mov     edi, PD1
+    call    clear_page
+    mov     edi, PD2
+    call    clear_page
+    mov     edi, PD3
     call    clear_page
 
     mov     edi, msg_page_buffer_clear
@@ -90,20 +99,20 @@ check_long_mode_paging_avaliable:
     stc
     ret
 
-page_link:
+page_link2:
     mov     eax, PDPT
     or      eax, 11b            ; Present | Writable
     mov     [PML4], eax
     mov     dword [PML4 + 4], 0
 
-    mov     eax, PD
+    mov     eax, PD0
     or      eax, 11b
     mov     [PDPT], eax
     mov     dword [PDPT + 4], 0 ; PDPT now have entry 1 PD
 
-    mov     edi, PD             ; location for page table
+    mov     edi, PD0            ; location for page table
     xor     eax, eax            ; pointer counter
-    mov     ecx, 16             ; fill first 32 MiB
+    mov     ecx, 512             ; fill first 32 MiB (changed) not it 1gb
 
 .page_table_loop:
     mov     edx, eax
@@ -113,6 +122,49 @@ page_link:
     mov     dword [edi + 4], 0
     add     eax, 0x200000       ; next 2 MiB
     add     edi, 8              ; Next PDE
+
+    dec     ecx
+    test    ecx, ecx
+    jne     .page_table_loop
+
+    ret
+
+page_link:
+    ; PML4[0] -> PDPT
+    mov     eax, PDPT
+    or      eax, 11b              ; Present | Writable
+    mov     [PML4], eax
+    mov     dword [PML4 + 4], 0
+
+    ; PDPT[0..3] -> four page directories
+    mov     edi, PDPT
+    mov     eax, PD0
+    mov     ecx, 4
+
+.link_directories:
+    mov     edx, eax
+    or      edx, 11b              ; Present | Writable
+    mov     [edi], edx
+    mov     dword [edi + 4], 0
+
+    add     eax, 0x1000            ; Next page directory
+    add     edi, 8                 ; Next PDPT entry
+
+    loop    .link_directories
+
+    ; Map first 4 GiB using 2048 x 2 MiB pages
+    mov     edi, PD0
+    xor     eax, eax               ; Physical address = 0
+    mov     ecx, 2048
+
+.page_table_loop:
+    mov     edx, eax
+    or      edx, 10000011b         ; Present | Writable | PS
+    mov     [edi], edx
+    mov     dword [edi + 4], 0
+
+    add     eax, 0x200000           ; Next 2 MiB page
+    add     edi, 8                  ; Next PDE
 
     dec     ecx
     test    ecx, ecx

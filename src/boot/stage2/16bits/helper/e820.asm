@@ -34,8 +34,8 @@ detect_memory_e820:
     mov     edx, [es:di + 4]
     ; edx:eax + length
     add     eax, [es:di + 8]
-    adc     edx, [es:di + 12]   ; this instruction save my life bro I dint even know this exist
-    jc      .skip               ; this is why we love CISC
+    adc     edx, [es:di + 12]   ; this instruction save my life bro I dint even know this exist until now
+    jc      .skip               ; this is why we all love CISC
 
     inc     dword [boot_info.entry_count]
     add     di, E820_entry_size ; advanacing pointer if all valid
@@ -150,24 +150,24 @@ memory_map_merge:
     add     cx, ax
     shl     cx, 3       ; cx to offset
 
-    mov     eax, [boot_info.memory_map + ecx]       ; lower half base
-    mov     edx, [boot_info.memory_map + ecx + 4]   ; higher half base
+    mov     eax, [boot_info.memory_map + ecx]         ; lower half base
+    mov     edx, [boot_info.memory_map + ecx + 4]     ; higher half base
     add     eax, [boot_info.memory_map + ecx + 8]     ; add lower length
     adc     edx, [boot_info.memory_map + ecx + 12]    ; higher half length
 
-    cmp     eax,[boot_info.memory_map + ecx + 24]    ; compare to lower base address of next
+    cmp     eax,[boot_info.memory_map + ecx + 24]     ; compare to lower base address of next
     jne     .not_equal
     cmp     edx, [boot_info.memory_map + ecx + 28]    ; compare to upper base address of next
     jne     .not_equal
 
 .equal:
     ; after basic address check, compare type and extended attribute
-    mov     eax, [boot_info.memory_map + ecx + 16]  ; it 4 byte long
-    cmp     eax, [boot_info.memory_map + ecx + 40]  ; compare type
+    mov     eax, [boot_info.memory_map + ecx + 16]    ; it 4 byte long
+    cmp     eax, [boot_info.memory_map + ecx + 40]    ; compare type
     jne     .not_equal
 
     mov     eax, [boot_info.memory_map + ecx + 20]
-    cmp     eax, [boot_info.memory_map + ecx + 44]  ; compare extended attribute
+    cmp     eax, [boot_info.memory_map + ecx + 44]    ; compare extended attribute
     jne     .not_equal
     pop     ecx     ; now it index instead of offset
     mov     edi, ecx

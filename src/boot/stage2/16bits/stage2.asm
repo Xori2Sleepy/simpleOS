@@ -43,6 +43,8 @@ stage2_entry:
     call    print_loop
     call    kernel_load_16
 
+
+
     cli
     in      al, 0x70            ; Read current CMOS state
     or      al, 0x80            ; Set bit 7 to mask NMIs
@@ -113,4 +115,4 @@ get_bios_cursor:
 ; ---------- just other stuff ----------
     scratchpad      equ     0x1000
 %include "src/boot/stage2/32bits/protected32.asm"  ; we seperate the 32bit code, look cleaner. It already a mess here.
-times 36864-($-$$)   db      0
+times 36864-($-$$)    db      0x69

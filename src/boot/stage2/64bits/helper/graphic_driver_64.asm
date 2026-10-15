@@ -1,29 +1,33 @@
-[bits 64]
-default abs
+bits 64
+default rel
 ; duplicated code for 64 bits stuff
-draw_pixel_64:
+; actually I did change a few thing, bc of bugs of course...
+draw_pixel64:
     ; currently only 32 bpp supported
-    ; input: x in edi ; input y in esi ; edx = color
-    ; off set calculation 
-    mov     al, byte [boot_info.vbe_bpp]
-    shr     al, 3
+    ; input: x in edi ; y in esi ; color in edx
+    ; clobbered: eflags only
+    push    rax
+    push    rcx
 
-    movzx   eax, al
-    imul    eax, edi        ; edi useless now
-    movzx   edi, word [boot_info.vbe_pitch]
-    imul    esi, edi
-    add     eax, esi
-    ; address calculation
-    mov     edi, [boot_info.vbe_framebuffer]
-    lea     eax, [rdi + rax]
-    ; move color into address
-    mov     [rax], edx
+    movzx   eax, byte [boot_info.vbe_bpp]
+    shr     eax, 3                  ; bytes per pixel
+
+    imul    eax, edi                ; x * bytes per pixel
+    movzx   ecx, word [boot_info.vbe_pitch]
+    imul    ecx, esi                ; y * pitch
+    add     eax, ecx
+
+    mov     ecx, [boot_info.vbe_framebuffer]    ; zero-extended into rcx
+    mov     [rcx + rax], edx
+
+    pop     rcx
+    pop     rax
     ret
 
-calculate_grid_data_64:
+calculate_grid_data64:
     ; input: font width in edi; font height in esi ; letters spacing in edx ; lines spacing in ecx
     ; output: NA
-    ; clobbered: eflags ; eax ; edx
+    ; clobbered: eflags ; eax ; edx ; edi ; esi
     mov     [vbe_info.bitmap_width], edi
     mov     [vbe_info.bitmap_height], esi
 
@@ -34,9 +38,9 @@ calculate_grid_data_64:
 
     movzx   eax, word [boot_info.vbe_width]
     xor     edx, edx
-    div     edi             ; EDX:EAX / EDI
+    div     edi                     ; EDX:EAX / EDI
     mov     [vbe_info.max_col], eax
-    mov     [vbe_info.rem_x], edx    ; remnent pixel
+    mov     [vbe_info.rem_x], edx   ; remnant pixels
 
     movzx   eax, word [boot_info.vbe_height]
     xor     edx, edx
@@ -46,136 +50,122 @@ calculate_grid_data_64:
 
     ret
 
-draw_char_64:
-    ; currently only 32
-    ; input: row coordinate in edi ; col coordinate in esi ; ASCII char in edx ; color in structure ; control bits 0 for mode
+draw_char64:
+    ; currently only 32 bpp
+    ; input: row in edi ; col in esi ; ASCII char in dl ; colors in vbe_info ; control flag
     ; output: NA
-    ; clobbered:
-    ; note: [ASCII_lookup_table + ascii char #] = pointer to char bit map
-    ;     : control bits 0 = on -> absolute move ; off -> relative to cursor
-    ;     : bits 4 -> background color 1 = actiave
+    ; clobbered: eflags only
+    ; note: [ASCII_lookup_table + ascii * 4] = pointer to char bitmap (dd entries, so the
+    ;       font must live below 4 GiB; if convert the table to dq, see marked line)
+    ;     : control bit 0 on -> absolute position (edi/esi) ; off -> use cursor
+    ;     : control bit 4 on -> also paint background pixels
+    push    rax
+    push    rbx
+    push    rcx
+    push    rdx
+    push    rsi
+    push    rdi
+    push    r8
+    push    r9
+    push    r10
 
-    ; convert grid offset to pixel offset
-    mov     ax, [vbe_info.control_flag]
-    and     ax, 1           ; isolate LSB
-    test    ax, ax          ; if bits on = absolute ; off = relative cursor
-    jnz     .absolute       ; on abs
+    test    word [vbe_info.control_flag], 1
+    jnz     .absolute
     mov     edi, [vbe_info.cursor_row]
     mov     esi, [vbe_info.cursor_col]
 
 .absolute:
-    push    rdx
-    mov     eax, [vbe_info.true_grid_height]
-    xor     edx, edx
-    mul     edi
-    mov     edi, eax
+    ; grid offset -> pixel offset
+    mov     r8d, [vbe_info.true_grid_height]
+    imul    r8d, edi                ; r8d = pixel Y of the cell
+    mov     r9d, [vbe_info.true_grid_width]
+    imul    r9d, esi                ; r9d = pixel X of the cell
 
-    mov     eax, [vbe_info.true_grid_width]
-    xor     edx, edx
-    mul     esi
-    mov     esi, eax
-    pop     rdx
+    movzx   edx, dl
+    lea     rax, [ASCII_lookup_table]
+    mov     r10d, [rax + rdx * 4]   ; r10 = bitmap pointer (use "mov r10, [rax + rdx*8]" for dq table)
 
-    mov     edx, [ASCII_lookup_table + rdx * 4]
-    ; write to grid logic
-    xor     ecx, ecx        ; row counter
-.char_loop:
-    mov     al, [rdx + rcx] ; first row (byte) into al
-    xor     ebx, ebx        ; col counter
+    xor     ecx, ecx                ; row counter
+.row_loop:
+    mov     al, [r10 + rcx]         ; one bitmap row
+    xor     ebx, ebx                ; column counter
 
-.draw_row_loop:
-    shl     al, 1           ; extract bit into carry (this is a MSB and LSB bs)
-    jc      .draw
- 
-    push    rax
-    push    rdi
-    push    rsi
-    ; we need to move edi + ecx to esi and esi + edx to edi, confusing I know!
-    mov     ax, word [vbe_info.control_flag]
-    and     ax, 16          ; 4th bits isolated 
-    test    ax, ax
-    jz      .skip_background
-    mov     eax, esi
-    add     edi, ecx
-    mov     esi, edi        ; esi = edi + ecx <- row address + row counter
-    add     eax, ebx
-    mov     edi, eax        ; edi = esi + edx <- col address + col counter
+.col_loop:
+    shl     al, 1                   ; MSB first, bit goes to carry
+    jc      .fg
 
+    test    word [vbe_info.control_flag], 16
+    jz      .next_pixel             ; background disabled
     mov     edx, [vbe_info.bg_color32]
-    call    draw_pixel_64
-.skip_background:
-    pop     rsi
-    pop     rdi
-    pop     rax
+    jmp     .plot
 
-    inc     ebx
-    cmp     ebx, 8          ; too much
-    je      .next_row
-    jmp     .draw_row_loop
-    
-.draw:
-    push    rax
-    push    rdi
-    push    rsi
-
-    ; we need to move edi + ecx to esi and esi + edx to edi, confusing I know!
-    mov     eax, esi
-    add     edi, ecx
-    mov     esi, edi        ; esi = edi + ecx <- row address + row counter
-    add     eax, ebx
-    mov     edi, eax        ; edi = esi + edx <- col address + col counter
-
+.fg:
     mov     edx, [vbe_info.fg_color32]
-    call    draw_pixel_64
 
-    pop     rsi
+.plot:
+    lea     edi, [r9 + rbx]         ; x = cell X + col
+    lea     esi, [r8 + rcx]         ; y = cell Y + row
+    call    draw_pixel64
+
+.next_pixel:
+    inc     ebx
+    cmp     ebx, 8
+    jb      .col_loop
+
+    inc     ecx
+    cmp     ecx, 8
+    jb      .row_loop
+
+    pop     r10
+    pop     r9
+    pop     r8
     pop     rdi
+    pop     rsi
+    pop     rdx
+    pop     rcx
+    pop     rbx
     pop     rax
-
-    inc     ebx             ; next pixel in the row (col inc)
-    cmp     ebx, 8          ; too much
-    je      .next_row
-    jmp     .draw_row_loop
-
-.next_row:
-    inc     ecx             ; row counter
-    cmp     ecx, 8          ; too much
-    je      .done
-    jmp     .char_loop
-
-.done:
     ret
 
-draw_string_64:
-    ; input: pointer in edi ; no mode -> if user want abs string print, remember old address and uses mov_cursor 
+draw_string64:
+    ; input: pointer in rdi (NUL terminated)
+    ;        no mode -> if you want abs string print, move the cursor first with vbe_move_cursor
     ; output: NA
-    ; clobbered:
+    ; clobbered: eflags only (colors and control flag are restored on exit)
+    ; escape sequences (only when control bit 3 is on):
+    ;     \\   -> literal backslash
+    ;     \aX  -> background color = preset X (hex digit)
+    ;     \bX  -> foreground color = preset X (hex digit)
+    push    rax
     push    rbx
-    mov     ebx, [vbe_info.bg_color32]
-    push    rbx
-    mov     ebx, [vbe_info.fg_color32]
-    push    rbx
-    
-    mov     bx, [vbe_info.control_flag]
-    and     bx, 8           ; on = esc ; off = disable
+    push    rdx
+    push    rsi
+    push    rdi
 
-    mov     esi, edi
-    mov     ax, [vbe_info.control_flag]
-    push    rax             ; function are responsible for control flag perservation
-    and     ax, -4          ; turn bit 0 and 1 off (selecte relative print char and incrimental cursor move)
+    mov     eax, [vbe_info.bg_color32]
+    push    rax
+    mov     eax, [vbe_info.fg_color32]
+    push    rax
+    movzx   eax, word [vbe_info.control_flag]
+    push    rax                     ; functions are responsible for control flag preservation
+
+    mov     ebx, eax
+    and     ebx, 8                  ; ebx != 0 -> escape sequences enabled
+    and     eax, 0xFFFC             ; turn bit 0 and 1 off (relative char, incremental cursor)
     mov     [vbe_info.control_flag], ax
-    xor     eax, eax
+
+    mov     rsi, rdi
 
 .loop:
-    lodsb                   ; load char from [esi] into AL
+    lodsb                           ; al = [rsi++]
     movzx   edx, al
 
-    cmp     edx, 0
-    je      .done
-    test    bx, bx          ; esc seq bit
+    test    edx, edx
+    jz      .done
+    test    ebx, ebx
     jz      .skip_esc
 
-    cmp     edx, 92         ; if bit on esc seq can be detected
+    cmp     edx, 92                 ; '\'
     je      .esc_seq
 
 .skip_esc:
@@ -184,44 +174,47 @@ draw_string_64:
     cmp     edx, 13
     je      .carriage_return
 
-    push    rsi 
-    call    draw_char_64       ; auto translate ASCII to printable pixel
+    call    draw_char64              ; ASCII -> pixels at the cursor
 
+    push    rsi
     xor     edi, edi
     mov     esi, 1
-    call    vbe_move_cursor_64
-
+    call    vbe_move_cursor64
     pop     rsi
     jmp     .loop
 
 .done:
-    pop     rax              ; we return og flags to memory
+    pop     rax
     mov     [vbe_info.control_flag], ax
+    pop     rax
+    mov     [vbe_info.fg_color32], eax
+    pop     rax
+    mov     [vbe_info.bg_color32], eax  ; restore colors so esc seq doesn't leak out
+    pop     rdi
+    pop     rsi
+    pop     rdx
     pop     rbx
-    mov     [vbe_info.fg_color32], ebx
-    pop     rbx
-    mov     [vbe_info.bg_color32], ebx      ; perserving og color so esc seq doesnt change it
-    pop     rbx
+    pop     rax
     ret
 
 .line_feed:
     push    rsi
     mov     edi, 1
     xor     esi, esi
-    call    vbe_move_cursor_64
+    call    vbe_move_cursor64
     pop     rsi
     jmp     .loop
 
 .carriage_return:
     push    rsi
-    mov     ax, [vbe_info.control_flag]
+    movzx   eax, word [vbe_info.control_flag]
     push    rax
-    or      ax, 2          ; absolute
+    or      ax, 2                   ; absolute move
     mov     [vbe_info.control_flag], ax
 
     mov     edi, [vbe_info.cursor_row]
     xor     esi, esi
-    call    vbe_move_cursor_64
+    call    vbe_move_cursor64
 
     pop     rax
     mov     [vbe_info.control_flag], ax
@@ -229,8 +222,7 @@ draw_string_64:
     jmp     .loop
 
 .esc_seq:
-    mov     al, byte [esi]   
-    movzx   edx, al
+    movzx   edx, byte [rsi]
 
     cmp     edx, 92
     je      .backslash_handling
@@ -239,173 +231,177 @@ draw_string_64:
     cmp     edx, 'b'
     je      .fg_color_handling
 
-    jmp     .loop           ; nothing found? return
+    jmp     .loop                   ; unknown sequence, ignore the backslash
 
 .backslash_handling:
     push    rsi
-
     mov     edx, 92
-    call    draw_char_64
+    call    draw_char64
     xor     edi, edi
     mov     esi, 1
-    call    vbe_move_cursor_64
+    call    vbe_move_cursor64
     pop     rsi
-    add     esi, 1
+    inc     rsi
     jmp     .loop
 
 .bg_color_handling:
-    xor     eax, eax
-    mov     al, [rsi + 1]
-    call    vbe_convert_ascii2int
-    shl     eax, 2
-    mov     edx, vbe_color_preset_table
-    mov     edx, dword [rdx + rax]
+    movzx   eax, byte [rsi + 1]
+    call    vbe_convert_ascii2int64
+    and     eax, 0xF
+    lea     rdx, [vbe_color_preset_table]
+    mov     edx, [rdx + rax * 4]
     mov     [vbe_info.bg_color32], edx
-    add     esi, 2
+    add     rsi, 2
     jmp     .loop
 
 .fg_color_handling:
-    mov     al, [rsi + 1]
-    call    vbe_convert_ascii2int
-    shl     eax, 2
-    mov     edx, vbe_color_preset_table
-    mov     edx, dword [rdx + rax]
+    movzx   eax, byte [rsi + 1]
+    call    vbe_convert_ascii2int64
+    and     eax, 0xF
+    lea     rdx, [vbe_color_preset_table]
+    mov     edx, [rdx + rax * 4]
     mov     [vbe_info.fg_color32], edx
-    add     esi, 2
+    add     rsi, 2
     jmp     .loop
 
-vbe_clear_screen_64:
+vbe_clear_screen64:
     ; no input
-    ; ecx = width * height * (bpp/8) = total byte to write to buffer
-
-    xor     edi, edi
+    ; fills the whole framebuffer with the background color
+    ; clobbered: eflags only
+    push    rax
+    push    rcx
+    push    rdx
+    push    rdi
 
     movzx   eax, word [boot_info.vbe_pitch]
     movzx   edx, word [boot_info.vbe_height]
     imul    eax, edx
-    mov     ecx, eax        ; total byte in ecx
+    mov     ecx, eax                ; total bytes in ecx (rcx zero-extended)
 
-    mov     edi, [boot_info.vbe_framebuffer]
-    cld                     ; eax, edi, ecx ready
-    
-    mov     al, [boot_info.vbe_bpp]
-    cmp     al, 32
+    mov     edi, [boot_info.vbe_framebuffer]    ; rdi zero-extended
+    cld
+
+    movzx   eax, byte [boot_info.vbe_bpp]
+    cmp     eax, 32
     je      .clear32
-    cmp     al, 24
+    cmp     eax, 24
     je      .clear24
-    cmp     al, 16
+    cmp     eax, 16
     je      .clear16
+    cmp     eax, 8
+    je      .clear8
+    jmp     .exit                   ; unsupported depth
 
 .clear32:
     mov     eax, [vbe_info.bg_color32]
-    ; calculate left over and how many time to do stosd
-    shr     ecx, 2          ; div by 4 to get instance of word size
-    cld
-    rep     stosd           ; ecx, eax and edi ready
-    ret
+    shr     ecx, 2                  ; bytes -> dwords
+    rep     stosd
+    jmp     .exit
 
 .clear24:
     ; write repeating BGR bytes
     mov     al, [vbe_info.bg_color24]
     mov     ah, [vbe_info.bg_color24 + 1]
     mov     dl, [vbe_info.bg_color24 + 2]
-
 .loop24:
     cmp     ecx, 3
-    jb      .done24
+    jb      .exit
 
     stosw
     mov     [rdi], dl
-    inc     edi
+    inc     rdi
 
     sub     ecx, 3
     jmp     .loop24
 
-.done24:
-    ret
-
 .clear16:
     mov     ax, [vbe_info.bg_color16]
-    shr     ecx, 1          ; div by 2 for word
-    cld
+    shr     ecx, 1                  ; bytes -> words
     rep     stosw
+    jmp     .exit
+
+.clear8:
+    mov     al, [vbe_info.bg_color8]
+    rep     stosb
+
+.exit:
+    pop     rdi
+    pop     rdx
+    pop     rcx
+    pop     rax
     ret
 
-vbe_move_cursor_64:
-    ; input: row in edi ; col in esi ; control bits 1 for mode
+vbe_move_cursor64:
+    ; input: row in edi ; col in esi ; control bit 1: off = relative move ; on = absolute move
     ; output: NA
-    ; clobbered: 
-    mov     ax, [vbe_info.control_flag]
-    and     ax, 2           ; isolate bits 1
-    test    ax, ax          ; if bits off = incrimental move ; on = absolute move
+    ; clobbered: eflags ; edi ; esi
+    test    word [vbe_info.control_flag], 2
     jnz     .absolute
 
-    mov     eax, [vbe_info.cursor_row]
-    add     edi, eax
-    mov     eax, [vbe_info.cursor_col]
-    add     esi, eax
+    add     edi, [vbe_info.cursor_row]
+    add     esi, [vbe_info.cursor_col]
 
 .absolute:
-    call    vbe_normalized_64
+    call    vbe_normalized64
     mov     [vbe_info.cursor_row], edi
     mov     [vbe_info.cursor_col], esi
     ret
 
-vbe_normalized_64:
-    ; input: row in edi ; col in esi ; control bits 2 for mode
+vbe_normalized64:
+    ; input: row in edi ; col in esi ; control bit 2: on = clear screen when wrapping past bottom
     ; output: row in edi ; col in esi
-    ; clobbered: 
-    ; note: bit 2 on = clear 
-    mov     dx, [vbe_info.control_flag]
-    and     dx, 4           ; isolate bits 2 (value 4)
+    ; clobbered: eflags ; edi ; esi
+    push    rbx
+    push    rcx
+    push    rdx
+
+    movzx   edx, word [vbe_info.control_flag]
+    and     edx, 4                  ; isolate bit 2
     mov     ecx, [vbe_info.max_row]
     mov     ebx, [vbe_info.max_col]
+
+    ; grid not calculated yet -> avoid an endless loop
+    test    ebx, ebx
+    jz      .done
+    test    ecx, ecx
+    jz      .done
 
 .normalize_col:
     cmp     esi, ebx
     jb      .normalize_row
-    sub     esi, ebx        ; if esi >= limit, fall here
-    inc     edi             ; inc row
+    sub     esi, ebx                ; col >= limit: wrap to next row
+    inc     edi
     jmp     .normalize_col
 
 .normalize_row:
     cmp     edi, ecx
     jb      .done
 
-.wrap_top:
-    cmp     dx, 4
-    jne     .skip_clear
-
-    push    rax
-    push    rcx
-    push    rdx
-    push    rdi
-    push    rsi
-    call    vbe_clear_screen_64
-    pop     rsi
-    pop     rdi
-    pop     rdx
-    pop     rcx
-    pop     rax
+    test    edx, edx
+    jz      .skip_clear
+    call    vbe_clear_screen64        ; preserves all registers
 
 .skip_clear:
     sub     edi, ecx
     jmp     .normalize_row
+
 .done:
+    pop     rdx
+    pop     rcx
+    pop     rbx
     ret
-    
-vbe_convert_ascii2int_64:
-    ; purpose: convert ascii (0 to 9 & a to z & A to Z) to raw integer based on hex
+
+vbe_convert_ascii2int64:
+    ; purpose: convert ascii (0-9 & a-f & A-F) to its hex value
     ; input: al <- ASCII
     ; output: al
-    ; clobered: flags, al
+    ; clobbered: eflags, al
     cmp     al, '9'
-    jbe     .is_digit           ; # come before letter, if it doesnt jmp it lettert
-    
-    or      al, 0x20            ; convert capital to lower
-    sub     al, 0x57            
+    jbe     .is_digit               ; digits come before letters
+
+    or      al, 0x20                ; capital -> lower
+    sub     al, 0x57
     ret
 .is_digit:
     sub     al, 0x30
     ret
-

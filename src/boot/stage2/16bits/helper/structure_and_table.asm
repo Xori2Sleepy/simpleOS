@@ -53,6 +53,7 @@ gdt_start:
     gdt_entries 0, 0xFFFFF, 10011010b, 1100b    ; 0x08 - 32 bits Kernel code segment descriptor
     gdt_entries 0, 0xFFFFF, 10011010b, 1010b    ; 0x10 - 64 bits Kernel code segment descriptor
     gdt_entries 0, 0xFFFFF, 10010010b, 1100b    ; 0x18 - 32 bits Data segment descriptor
+    gdt_entries 0, 0xFFFF, 10011010b, 0000b     ; 0x20 - 16 bits Bootloader code segment descriptor
 gdt_end:
 
 gdt_descriptor:
@@ -169,12 +170,13 @@ boot_info:
     ;.memory_map     times 64 * 24       db      0   ; 1536 byte
     .memory_map     equ     0x4000
     .effective_load_address     dq      0   ; actual kernel loading address
+    .effective_loaded_bytes     dq      0   ; how many byte is actualyl loaded
 
 ; -------------------- CPUID TABLE --------------------
 CPUID_VENDOR_TABLE:
     ; AMD
     CPUID_VENDOR_AMD        db      "AuthenticAMD"
-    CPUID_VENDOR_AMD_OLD    db      "AMDisbetter!"      ; I agree bro
+    CPUID_VENDOR_AMD_OLD    db      "AMDisbetter!"      ; We all LOVE Radeon, RIGHT?
     CPUID_VENDOR_HYGON      db      "HygonGenuine"
 
     ; Intel

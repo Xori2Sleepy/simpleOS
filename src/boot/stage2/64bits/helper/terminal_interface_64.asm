@@ -1,5 +1,5 @@
 [bits 64]
-default abs
+default rel
 
 terminal_initialize_64:
     ; hard coded function to prepare some random stuff
@@ -13,7 +13,7 @@ terminal_initialize_64:
     mov     esi, 8
     mov     edx, 3
     mov     ecx, 5
-    call    calculate_grid_data_64
+    call    calculate_grid_data64
     mov     dword [vbe_info.fg_color32], 0x00FFFFFF
     mov     dword [vbe_info.bg_color32], 0x00000000
     ret
@@ -53,7 +53,7 @@ terminal_print_char64:
     mov     [vbe_info.fg_color32], eax
     
     mov     edx, edi
-    call    draw_char_64
+    call    draw_char64
 
     pop     rax
     mov     [vbe_info.fg_color32], eax
@@ -103,7 +103,7 @@ terminal_print_string64:
     mov     [vbe_info.fg_color32], eax
 
     ; edi already contain pointer
-    call    draw_string_64
+    call    draw_string64
     pop     rax
     mov     [vbe_info.fg_color32], eax
     pop     rax
@@ -150,7 +150,7 @@ terminal_clear_screen_64:
     shl     edi, 2
     mov     edi, dword [eax + edi]
     mov     [vbe_info.bg_color32], edi
-    call    vbe_clear_screen_64
+    call    vbe_clear_screen64
     pop     rax
     mov     [vbe_info.bg_color32], eax
     ret
@@ -178,7 +178,7 @@ terminal_move_cursor_64:
     push    rax
     and     ax, -3              ; clear bits 1
     mov     [vbe_info.control_flag], ax
-    call    vbe_move_cursor_64
+    call    vbe_move_cursor64
     pop     rax
     mov     [vbe_info.control_flag], ax
     ret
