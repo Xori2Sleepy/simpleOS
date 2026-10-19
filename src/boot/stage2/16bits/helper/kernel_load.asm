@@ -119,23 +119,23 @@ kernel_header_read:
 
 ; -------------------- valid memory? -------------------- 
 valid_address_check:
-    ; input: sizes in edi:esi
+    ; input: address in edi:esi
     ; output: carry flag
     xor     eax, eax
     xor     edx, edx
     xor     ecx, ecx
 
     mov     ebx, [boot_info.entry_count]
-    mov     eax, ebx
-    shl     ebx, 1
-    add     ebx, eax
-    shl     ebx, 3
+    mov     eax, ebx    ; I can use lea ik
+    shl     ebx, 1      ; but I changed it for some reason
+    add     ebx, eax    ; must have been a bug, dont remember thought
+    shl     ebx, 3      ; might be a problem with NASM
 
 .search_loop:
     cmp     ecx, ebx
     jae     .invalid
 
-    cmp     dword [ecx + boot_info.memory_map + 16], 1
+    cmp     dword [ecx + boot_info.memory_map + 16], 1  ; type (usable RAM)
     jne     .next_entry
 
     mov     eax, [ecx + boot_info.memory_map]
@@ -213,7 +213,7 @@ search_avaliable:
     push    esi
     push    edi
 
-    cmp     [ecx + boot_info.memory_map + 16], 1  ; type 1 usable ram
+    cmp     dword [ecx + boot_info.memory_map + 16], 1  ; type 1 usable ram
     jne     .next_entry
 
     mov     edx, [ecx + boot_info.memory_map + 12]
@@ -541,7 +541,6 @@ load_chuck_to_higher_memory:
 
 ; -------------------- kernel load -------------------- 
 kernel_load_16:
-
     mov     byte [disk_trial_counter], 3        ; counter
 
 .load:

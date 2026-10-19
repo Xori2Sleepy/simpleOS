@@ -1,5 +1,5 @@
 bits 64
-default rel
+default abs
 ; duplicated code for 64 bits stuff
 ; actually I did change a few thing, bc of bugs of course...
 draw_pixel64:

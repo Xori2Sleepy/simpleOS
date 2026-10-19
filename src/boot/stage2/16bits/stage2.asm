@@ -43,8 +43,6 @@ stage2_entry:
     call    print_loop
     call    kernel_load_16
 
-
-
     cli
     in      al, 0x70            ; Read current CMOS state
     or      al, 0x80            ; Set bit 7 to mask NMIs
@@ -56,7 +54,7 @@ stage2_entry:
     or      eax, 1              ; turn the first bits of cr0 on (Protection Enable, PE bits)
     push    eax
 
-    call    print_handling
+    call    print_handling      ; graphic shit
     jc      jmp32
 
     mov     si, msg_gdt
@@ -67,7 +65,7 @@ stage2_entry:
 jmp32:
     pop     eax
     mov     cr0, eax            ; protected mode officially on
-    jmp     kernelcode_32bits_descriptor:protected32_entry
+    jmp     kernelcode_32bits_descriptor:protected32_entry  ; misleading name change later
 
 ; ---------- functions ---------- 
 %include "src/boot/stage2/16bits/helper/a20.asm"

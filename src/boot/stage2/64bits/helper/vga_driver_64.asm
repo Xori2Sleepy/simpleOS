@@ -1,5 +1,5 @@
 [bits 64]
-default rel
+default abs
 ; THIS IS GOING TO BE THE LEAST CLEAN REGISTER USAGE YOU WILL EVER SEEN
 ; it a hobby OS and functions is is not uses by other process so... it doesnt matter that much
 ; the problem is for my future self to fix ;)

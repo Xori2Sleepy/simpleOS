@@ -1,5 +1,5 @@
 [bits 64]
-default rel
+default abs
 
 terminal_initialize_64:
     ; hard coded function to prepare some random stuff

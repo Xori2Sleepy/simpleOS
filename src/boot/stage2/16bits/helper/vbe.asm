@@ -1,6 +1,7 @@
 [bits 16]
 
 print_handling:
+    call    vbe_detect
     call    kernel_analyze_graphic
     jnc     .graphic_not_requested
 
@@ -104,7 +105,8 @@ vbe_4f00:
     mov     si, msg_vbe_4f00_detected
     call    print_loop
     
-    mov     ax, [es:di + 2]
+    mov     ax, [es:di + 4]             ; i put this as + 2 a few week ago, is the old me wrong?
+                                        ; I am missing something, help me here me from the past
     mov     [boot_info.vbe_version], ax
     mov     eax, [es:di + 6]
     mov     [boot_info.vbe_OEM_string], eax
@@ -329,3 +331,42 @@ vbe_4f02:
     stc
     ret
 
+vbe_detect:
+    push    es
+    push    di
+
+    xor     ax, ax
+    mov     es, ax
+    mov     di, scratchpad
+
+    mov     dword [es:di], "VBE2"
+
+    mov     ax, 0x4F00
+    int     0x10
+
+    cmp     ax, 0x004F
+    jne     .unavailable
+
+    cmp     dword [es:di], "VESA"
+    jne     .unavailable
+
+    ; Require VBE 2.0 or newer.
+    mov     ax, [es:di + 4]
+    cmp     ah, 2
+    jb      .unavailable
+
+    ; Set boot_report bit 7: VBE available.
+    or      byte [boot_report], 1 << 7
+
+    pop     di
+    pop     es
+    clc
+    ret
+
+.unavailable:
+    ; Clear bit 7: VBE unavailable.
+    and     byte [boot_report], ~(1 << 7)
+    pop     di
+    pop     es
+    stc
+    ret

@@ -23,8 +23,28 @@ kernel_analyze_long_mode_32:
     clc
     ret
 
-; leaf analysis shit
+kernel_analyze_higher_half_32:
+    push    eax
+    mov     eax, [kernel_info.header_version] ; version 
+    shr     eax, 24     ; checking major version
+    test    eax, eax    ; unreleased major 0
+    je      .major0
+    ret
+.major0:
+    mov     eax, [kernel_info.flags]
+    and     eax, 1 << 4 ; isolate bits 4 : higher half
+    test    eax, eax
+    je      .m0_gOFF
+.m0_gON:
+    pop     eax
+    stc
+    ret
+.m0_gOFF:
+    pop     eax
+    clc
+    ret
 
+; leaf analysis shit
 leaf_analysis_long_mode_32:
     push    eax
     mov     eax, [boot_info.cpu_featuresx1_edx]
