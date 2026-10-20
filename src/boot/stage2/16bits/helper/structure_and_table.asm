@@ -68,13 +68,13 @@ kernel_info:
     .magic              dd      0
     .header_version     dd      0           ; first 8 - other flag, next 8 - patch , next 8 minor ; last 8 major
     .header_size        dw      0
+    .check_sum          dd      0
 
     .kernel_version     dw      0           ; kernel version
     .kernel_name        dd      0
     .load_address       dq      0
     .image_size         dq      0
 
-    .check_sum          dd      0
 
     .alignment          dd      0
     .entry32            dd      0           ; off set from image start

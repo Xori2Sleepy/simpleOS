@@ -351,8 +351,8 @@ load_sector_16:
     mov     dl, [boot_info.boot_drive]
     mov     si, scratchpad 
     int     13h
+    jc      .error_stop
 
-  ;  jc      .error_stop
     pop     ecx
     pop     edi
     pop     eax
@@ -363,8 +363,9 @@ load_sector_16:
     o16     call    trigger_unreal                 ; I'on think there any crushon if this shit crash
 
     ; need address in edi ; sector in esi
-    mov     esi, 32
+    mov     esi, 0x4000
     add     [boot_info.effective_loaded_bytes], esi
+    mov     esi, 32
     call    load_chuck_to_higher_memory      ; perseve eax, edi, and ecx
     dec     eax
     call    exit_unreal
@@ -395,7 +396,9 @@ load_sector_16:
 
     ; edi should be in here
     mov     esi, ecx
+    shl     esi, 9
     add     [boot_info.effective_loaded_bytes], esi
+    mov     esi, ecx
     call    load_chuck_to_higher_memory
     call    exit_unreal
 
@@ -416,6 +419,11 @@ load_sector_16:
     call    halt
     ret
 
+.error_stop:
+    mov     si, msg_disk_failed
+    call    print_loop
+    call    halt
+    
    
 
 trigger_unreal:
@@ -544,6 +552,7 @@ kernel_load_16:
     mov     byte [disk_trial_counter], 3        ; counter
 
 .load:
+    mov     dword [boot_info.effective_loaded_bytes], 0
     call    kernel_analyze_kernel_reallocatable
     jc      .search
     

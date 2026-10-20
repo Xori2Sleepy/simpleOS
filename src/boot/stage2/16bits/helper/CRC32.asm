@@ -5,6 +5,8 @@
 ; output regs: EAX = calculated CRC-32
 
 crc_32:
+    mov     dword [esi + 10], 0x0
+
     push    ebx
     push    edx
     push    esi

@@ -11,11 +11,9 @@ kernel_stack_compute:
     cmp     eax, 0x00100000
     jb      .below_1mb
     
-    push    eax
-    ;mov     edi, eax
+    mov     edi, [kernel_info.preferred_stack_top]
     call    valid_stack_address_check 
     jc      .search
-    pop     eax
 
     ; passed, so we note down
     mov     [boot_info.actual_stack_addr], eax     
@@ -42,17 +40,18 @@ kernel_stack_compute:
     pop    esi
     pop    edx
 
-    pop     eax
+    mov     eax, [kernel_info.preferred_stack_top]
     mov     edi, [kernel_info.stack_size]
     call    search_stack_avaliable
     jc      .no_valid
-        
+    
+    push    eax
     mov     edi, msg_stack_addr_found
     mov     esi, 0x0
     mov     edx, 0xF
     call    terminal_print_string32
+    pop     eax
 
-    mov     eax, [kernel_info.preferred_stack_top]
     mov     [boot_info.actual_stack_addr], eax     
     mov     eax, [kernel_info.stack_size]
     mov     [boot_info.actual_stack_size], eax
@@ -70,6 +69,7 @@ kernel_stack_compute:
     call    halt32
 
 valid_stack_address_check:
+    ; input: in edi
     ; Output: CF = 0 valid, CF = 1 invalid
     ; Clobbers EAX, EBX, ECX, EDX, ESI, EDI
 

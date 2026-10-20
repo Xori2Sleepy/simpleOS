@@ -6,19 +6,18 @@ kernel_header:
     .magic              dd      "QADB"
     .header_version     dd      0           ; unused right now / reserved
     .header_size        dw      kernel_header_end - kernel_header
+    .check_sum          dd      0xa2680f8c
 
     .kernel_version     dw      0
     .kernel_name        dd      0
     .load_address       dq      0x100000
     .image_size         dq      kernel_end - kernel_start
 
-    .check_sum          dd      0xce6e8eef
-
     .alignment          dd      0           ; no used for now
     .entry32            dd      0           ; off set from image start
     .entry64            dd      kernel_enter_64
     .stack_size         dd      0x4000      ; 16 kib apparrently, more than enought for my use
-    .stack_top          dd      0x300000    ; perffered stack top
+    .stack_top          dd      0x1 ;0x300000    ; perffered stack top
 
     .required_cpu       dd      0001b       ; NX and SSE4.2
     ; flag: 0 NX ; 1 SYSCALL ; 2 RDTSCP ; 3 SSE4_2 ; 4 POPCNT ; 5 AES ; 6 APIC
