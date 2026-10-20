@@ -48,7 +48,7 @@ kernel_analyze_frame_buffer:
     ret
 .major0:
     mov     eax, [kernel_info.flags]
-    and     eax, 1 << 2 ; isolate bits 1 : long_mode
+    and     eax, 1 << 2 ; isolate bits 2 
     test    eax, eax
     je      .m0_gOFF
 .m0_gON:
@@ -66,7 +66,7 @@ kernel_analyze_check_sum:
     ret
 .major0:
     mov     eax, [kernel_info.flags]
-    and     eax, 1 << 3 ; isolate bits 1 : long_mode
+    and     eax, 1 << 3 ; isolate bits 3
     test    eax, eax
     je      .m0_gOFF
 .m0_gON:
@@ -84,7 +84,7 @@ kernel_analyze_higher_half:
     ret
 .major0:
     mov     eax, [kernel_info.flags]
-    and     eax, 1 << 4 ; isolate bits 1 : long_mode
+    and     eax, 1 << 4 ; isolate bits 4
     test    eax, eax
     je      .m0_gOFF
 .m0_gON:
@@ -102,7 +102,7 @@ kernel_analyze_kernel_reallocatable:
     ret
 .major0:
     mov     eax, [kernel_info.flags]
-    and     eax, 1 << 5 ; isolate bits 1 : long_mode
+    and     eax, 1 << 5 ; isolate bits 5
     test    eax, eax
     je      .m0_gOFF
 .m0_gON:

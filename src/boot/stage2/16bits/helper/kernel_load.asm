@@ -1,7 +1,6 @@
 [bits 16]
 
-; FATAL ERROR IN THIS FILE IF FAIL, NO REPORT WILL BE RETURN TO BOOT_REPORT
-
+; FATAL ERROR IN THIS FILE IF MAJOR FUNCTIONS FAIL, NO REPORT WILL BE RETURN TO BOOT_REPORT. CPU WILL BE HALT
 ; -------------------- disk check ---------------------
 disk_check_extensions:
     ; need dl as input drive
@@ -16,19 +15,21 @@ disk_check_extensions:
     test    cx, 1           ; bit 0 is the extended disk access
     jz      .failed
 
+    mov     byte [boot_info.read_mode], 1
     clc
     ret
 .failed:
+    mov     byte [boot_info.read_mode], 0
     stc
     ret
 
-; -------------------- kernel load -------------------- 
+; -------------------- header load -------------------- 
 kernel_header_load:
     dec     byte [disk_trial_counter]
     jz      .kernel_load_failed
 
     mov     dl, [boot_info.boot_drive]
-    call    disk_check_extensions
+    call    disk_check_extensions       ; first time calling
     jc      .chs
 
 .lba:
@@ -118,23 +119,23 @@ kernel_header_read:
 
 ; -------------------- valid memory? -------------------- 
 valid_address_check:
-    ; input: sizes in edi:esi
+    ; input: address in edi:esi
     ; output: carry flag
     xor     eax, eax
     xor     edx, edx
     xor     ecx, ecx
 
     mov     ebx, [boot_info.entry_count]
-    mov     eax, ebx
-    shl     ebx, 1
-    add     ebx, eax
-    shl     ebx, 3
+    mov     eax, ebx    ; I can use lea ik
+    shl     ebx, 1      ; but I changed it for some reason
+    add     ebx, eax    ; must have been a bug, dont remember thought
+    shl     ebx, 3      ; might be a problem with NASM
 
 .search_loop:
     cmp     ecx, ebx
     jae     .invalid
 
-    cmp     dword [ecx + boot_info.memory_map + 16], 1
+    cmp     dword [ecx + boot_info.memory_map + 16], 1  ; type (usable RAM)
     jne     .next_entry
 
     mov     eax, [ecx + boot_info.memory_map]
@@ -212,7 +213,7 @@ search_avaliable:
     push    esi
     push    edi
 
-    cmp     [ecx + boot_info.memory_map + 16], 1  ; type 1 usable ram
+    cmp     dword [ecx + boot_info.memory_map + 16], 1  ; type 1 usable ram
     jne     .next_entry
 
     mov     edx, [ecx + boot_info.memory_map + 12]
@@ -293,27 +294,40 @@ search_avaliable:
 
 load_sector_16:
     ; input: edi <- load address
-    ; load stuff in a loop
+    ; This is the most sublime piece of code I have ever written
+    ; Oh, the beauty of undocumented CPU behavior
+    ; load dap to scratchpad
     push    edi
     mov     esi, kernel_dap
-    mov     edi, scratchpad ; copy to scratch pad
+    mov     edi, scratchpad
     xor     ecx, ecx
     mov     cl, byte [kernel_dap.dap_size]
     rep     movsb
     pop     edi
 
-    mov     word [scratchpad + 2], 32      ; load 32 sector at a time
-    mov     word [scratchpad + 4], 0       ; hard coded buffer - to 0x84000 (16 kib)
-    mov     word [scratchpad + 6], 0x8000  ; hard coded buffer - to 0x84000 (16 kib)
+;    push    si
+;    mov     si, msg_kernel_load_success
+;    call    print_loop
+;    pop     si
 
-    call    disk_check_extensions
-    jc      .chs
+
+    ; load to bounce buffer
+    mov     word [scratchpad + 2], 32      ; load 32 sector at a time
+    mov     word [scratchpad + 4], 0       ; load at load address directly
+    mov     word [scratchpad + 6], 0x8000  ; hard coded buffer up to 0x84000 (16 kib)
+
+
+    mov     al, [boot_info.read_mode]
+    test    al, al
+    je      .chs
+
 
 .lba:
     ; compute sector to load to eax
-    mov     eax, [kernel_info.image_size]
+    mov     eax, [kernel_info.image_size]  ; this unfortunately mean that kernel max out at 4 gb, any way if my kernel ever exceed
+                                           ; that number I am probbaly doing something very very wrong, window is only 11 mb
     mov     ecx, eax
-    shr     eax, 9          ; 2 ^ 9 = 512
+    shr     eax, 9          ; 2^9 = 512
     test    ecx, 0x1ff      ; bit shifted
     jz      .exact          ; no remainder
     inc     eax             ; if nz mean remainder, so add 1 sector
@@ -322,7 +336,7 @@ load_sector_16:
     ; compute chuck (32 sector for lba) to load in eax
     ; remainding chuck in ecx
     mov     ecx, eax
-    shr     eax, 5
+    shr     eax, 5          ; 2^5 = 32
     and     ecx, 31         ; for extra load
 
 .chuck_loop:
@@ -332,35 +346,61 @@ load_sector_16:
     push    eax
     push    edi
     push    ecx
+
     mov     ah, 42h
     mov     dl, [boot_info.boot_drive]
     mov     si, scratchpad 
     int     13h
- ;   jc      .error_stop
+    jc      .error_stop
+
     pop     ecx
     pop     edi
     pop     eax
 
-    ; need address in edi ; sector in esi
-    mov     esi, 32
-    call    load_chuck_to_higher_memory
+    ; I gave up on the initial unreal mode idea here
+    ; the bios call destroy my ES register I need, which kinda make unreal useless here ;-;
+    ; how did LILO even make use of this thing?
+    o16     call    trigger_unreal                 ; I'on think there any crushon if this shit crash
 
+    ; need address in edi ; sector in esi
+    mov     esi, 0x4000
+    add     [boot_info.effective_loaded_bytes], esi
+    mov     esi, 32
+    call    load_chuck_to_higher_memory      ; perseve eax, edi, and ecx
     dec     eax
+    call    exit_unreal
+
     add     edi, 0x4000     ; 32 * 512 = 0x4000
-    add     word [scratchpad + 8], 32        ; sector ad, in qword but doesnt matter
+    add     word [scratchpad + 8], 32        ; sector_ad, in qword but doesnt matter
     jmp     .chuck_loop
 
 .lba_done: 
     test    ecx, ecx
     jz      .done
-    mov     word [scratchpad + 2], ax        ; load extra sectors
+
+    push    eax
+    push    edi
+    push    ecx
+
+    mov     word [scratchpad + 2], cx        ; load extra sectors
     mov     ah, 42h
     mov     dl, [boot_info.boot_drive]
     mov     si, scratchpad 
     int     13h
- ;  jc      .error_stop
+
+    pop     ecx
+    pop     edi
+    pop     eax
+
+    o16     call    trigger_unreal
+
+    ; edi should be in here
+    mov     esi, ecx
+    shl     esi, 9
+    add     [boot_info.effective_loaded_bytes], esi
     mov     esi, ecx
     call    load_chuck_to_higher_memory
+    call    exit_unreal
 
 .done:
     mov     si, msg_kernel_load_success
@@ -368,17 +408,77 @@ load_sector_16:
     ret
 
 .chs:
+    mov     si, msg_kernel_load_CHS
+    call    print_loop
+    jmp     .crash_em_up
+    hlt     ; just in case it failed the jmp, somehow...
+
+.crash_em_up:
+    mov     si, msg_kernel_load_failed
+    call    print_loop
+    call    halt
     ret
+
+.error_stop:
+    mov     si, msg_disk_failed
+    call    print_loop
+    call    halt
     
+   
+
+trigger_unreal:
+    cli
+    lgdt    [gdt_descriptor]    ; loading gdt to gdtr
+    mov     eax, cr0
+    or      eax, 1
+    mov     cr0, eax
+    jmp     0x08:.entry         ; 32 bits code segment
+
+[bits 32]
+.entry:
+    mov     ax, 0x18            ; 32 bits data entry
+    mov     es, ax              ; only extra segment is need for es:di on movsX 
+
+    jmp     0x20:.explicit_real
+
+[bits 16]
+.explicit_real:
+    mov     eax, cr0
+    and     eax, ~1
+    mov     cr0, eax
+    jmp     0x0:.exit
+
+.exit:
+    sti
+    pop     ax
+    jmp     ax
+
+exit_unreal:
+    xor     ax, ax
+    mov     es, ax
+    ret
 
 load_chuck_to_higher_memory:
     ; input: destination in edi ; sector in esi
+    ; need ping pong ing 
+
     push    edi
     push    ecx
-    shl     esi, 7      ; times 512 and divide 4 (<< 9 >> 2)
+    push    eax
+    push    ds
+
+    shl     esi, 7      ; times 512 and divide 4 ( X << 9 >> 2)
     mov     ecx, esi    ; about of double word to move
-    mov     esi, 0x80000
-    rep     movsd
+
+    mov     ax, 0x8000  ; source
+    mov     ds, ax      ; represent 0x80000
+    xor     esi, esi
+
+.move:
+    cld
+    a32 o32 rep     movsd
+    pop     ds
+    pop     eax
     pop     ecx
     pop     edi
     ret
@@ -447,8 +547,12 @@ load_chuck_to_higher_memory:
 ;    call    print_loop
 ;.chs:
 
-; -------------------- header load -------------------- 
+; -------------------- kernel load -------------------- 
 kernel_load_16:
+    mov     byte [disk_trial_counter], 3        ; counter
+
+.load:
+    mov     dword [boot_info.effective_loaded_bytes], 0
     call    kernel_analyze_kernel_reallocatable
     jc      .search
     
@@ -466,12 +570,11 @@ kernel_load_16:
     call    valid_address_check
     jc      .cant_load_fatal_error
 
-    mov     si, msg_kernel_load_success
- ;   call    print_loop
     xor     esi, esi
     mov     edi, [kernel_info.load_address]
+    mov     [boot_info.effective_load_address], edi
     call    load_sector_16
-    ret
+    jmp     .load_done
 
 .below_1mb:
     mov     si, msg_kernel_load_err_addr_below
@@ -491,13 +594,40 @@ kernel_load_16:
     jnz     .cant_load_above_limit  ; if not zero it mean this thing is more than 4gib, dont accept
 
 .can_load:
-    mov     si, msg_kernel_load_success
-    ;call    print_loop
     xor     esi, esi
     mov     edi, eax        ; if it reach here it meant it must be below 32 limits, so we good
     call    load_sector_16
+    jmp     .load_done
+
+.load_done:
+    call    kernel_analyze_check_sum
+    jnc     .ret
+
+    mov     esi, [boot_info.effective_load_address]
+    mov     ecx, [boot_info.effective_loaded_bytes]
+    call    crc_32
+    mov     esi, [kernel_info.check_sum]
+    cmp     esi, eax
+    jne     .check_failed
+
+    mov     si, msg_kernel_load_check_success
+    call    print_loop
+.ret:
     ret
-    
+
+.check_failed:
+    mov     si, msg_kernel_load_check_failed_retry
+    call    print_loop
+    dec     byte [disk_trial_counter]
+    cmp     byte [disk_trial_counter], 0
+    jz      .fatal_err
+    jmp     .load
+
+.fatal_err:
+    mov     si, msg_kernel_load_check_failed_fatal
+    call    print_loop
+    call    halt
+
 .cant_load_fatal_error:
     mov     si, msg_kernel_load_err_no_mem
     call    print_loop
@@ -506,4 +636,8 @@ kernel_load_16:
     mov     si, msg_kernel_load_err_above_lim
     call    print_loop
     ; add some mechanicsm later
+    ; or not cause this need some 64 bit stuff, and well i cant be bother right now
+    ; i think unreal mode trick might not work because we also need paging? damn it
     call    halt
+
+%include "src/boot/stage2/16bits/helper/CRC32.asm"

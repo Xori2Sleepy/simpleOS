@@ -20,7 +20,7 @@
 ; -------------------- gdt space ------------------------
 
 null_descriptor                     equ     0x00
-kernelcode_32bits_descriptor        equ     0x08
+kernelcode_32bits_descriptor        equ     0x08        ; misleading name, change later
 kernelcode_64bits_descriptor        equ     0x10
 kerneldata_32bits_descriptor        equ     0x18
 
@@ -50,9 +50,10 @@ gdt_start:
 
     ; (32 bits) base, (20 bits) limit, (bytes) access bytes, (4 bits) others flags
     gdt_entries 0, 0, 0, 0                      ; 0x00 - null descriptor
-    gdt_entries 0, 0xFFFFF, 10011010b, 1100b    ; 0x08 - 32 bits Kernel code segment descriptor
-    gdt_entries 0, 0xFFFFF, 10011010b, 1010b    ; 0x10 - 64 bits Kernel code segment descriptor
+    gdt_entries 0, 0xFFFFF, 10011010b, 1100b    ; 0x08 - 32 bits code segment descriptor
+    gdt_entries 0, 0xFFFFF, 10011010b, 1010b    ; 0x10 - 64 bits code segment descriptor
     gdt_entries 0, 0xFFFFF, 10010010b, 1100b    ; 0x18 - 32 bits Data segment descriptor
+    gdt_entries 0, 0xFFFF, 10011010b, 0000b     ; 0x20 - 16 bits Bootloader code segment descriptor
 gdt_end:
 
 gdt_descriptor:
@@ -67,13 +68,13 @@ kernel_info:
     .magic              dd      0
     .header_version     dd      0           ; first 8 - other flag, next 8 - patch , next 8 minor ; last 8 major
     .header_size        dw      0
+    .check_sum          dd      0
 
     .kernel_version     dw      0           ; kernel version
     .kernel_name        dd      0
     .load_address       dq      0
     .image_size         dq      0
 
-    .check_sum          dd      0
 
     .alignment          dd      0
     .entry32            dd      0           ; off set from image start
@@ -82,6 +83,7 @@ kernel_info:
     .preferred_stack_top    dd      0
 
     .required_cpu       dd      0           ; cpuid id shit
+    ; flag: 0 NX ; 1 SYSCALL ; 2 RDTSCP ; 3 SSE4_2 ; 4 POPCNT ; 5 AES ; 6 APIC
     .flags              dd      0           ; boot service flags
     ; flag: 0 vbe_graphic ; 1 long mode ; 2 frame buffer require ; 3 check sum ; 
     ; flag: 4 higher half ; 5 kernel reallocatable ; ... higher loading ...
@@ -103,7 +105,6 @@ disk_trial_counter      db      4
 
 ; --------------------  boot info ------------------------
 align 8
-; if bit is on that mean something wrong, questionable design eh?
 ; edit: I CHANGED IT, NOW IF BIT OFF = we dint/couldnt activate or obtain it
 boot_report             dq      0           ; flag and stuff
     ; 0 <- leaf1
@@ -112,10 +113,14 @@ boot_report             dq      0           ; flag and stuff
     ; 3 <- graphic                          ; used by terminal_interface to determind printing mode
     ; 4 <- e801
     ; 5 <- xleaf1
+    ; 6 <- long mode
+    ; 7 <- VBE avaliable?
 
+boot_info_start:
 boot_info:
-    .boot_info_size     dq      0           ; fill later
+    .boot_info_size     dq      boot_info_end - boot_info_start
     .boot_drive         db      0
+    .read_mode          db      0           ; 0 for chs and 1 for lba
     .entry_count        dd      0           ; for memory map
 
     .reserved       times 3     db      0   ; for alignment
@@ -124,7 +129,7 @@ boot_info:
     .vbe_version        dw      0
     .vbe_OEM_string     dd      0           ; useless, i just want it
     .vbe_capabilities   dd      0
-    .vbe_video_mode_ptr dd      0
+    .vbe_video_mode_ptr dd      0           ; pointer to mode, used for looping and finding mode
     .vbe_total_memory   dw      0
 
     ;vbe 4f01 subsection
@@ -144,7 +149,7 @@ boot_info:
     .vbe_blue_mask      db      0
     .vbe_blue_shift     db      0
 
-    .vbe_framebuffer    dd      0
+    .vbe_framebuffer    dd      0           ; actual framebuffer address
 
     ;cpuid subsection
     .cpu_features1_ecx  dd      0
@@ -168,12 +173,20 @@ boot_info:
     ;.memory_map     times 64 * 24       db      0   ; 1536 byte
     .memory_map     equ     0x4000
     .effective_load_address     dq      0   ; actual kernel loading address
+    .effective_loaded_bytes     dq      0   ; how many byte is actualyl loaded
+
+    .actual_stack_addr  dd      0
+    .actual_stack_size  dd      0
+
+    .virtual_kernel_addr    dq      0
+
+boot_info_end:
 
 ; -------------------- CPUID TABLE --------------------
 CPUID_VENDOR_TABLE:
     ; AMD
     CPUID_VENDOR_AMD        db      "AuthenticAMD"
-    CPUID_VENDOR_AMD_OLD    db      "AMDisbetter!"      ; I agree bro
+    CPUID_VENDOR_AMD_OLD    db      "AMDisbetter!"      ; We all LOVE Radeon, RIGHT?
     CPUID_VENDOR_HYGON      db      "HygonGenuine"
 
     ; Intel
@@ -251,3 +264,16 @@ unify_color:
     dd      0x00FF55FF    ; D  Light Magenta
     dd      0x00FFFF55    ; E  Yellow
     dd      0x00FFFFFF    ; F  White
+
+; ------------------------------------------------
+;               constant space
+; ------------------------------------------------
+CPUID_AMD_CATEGORY                  equ     1
+CPUID_INTEL_CATEGORY                equ     2
+CPUID_INTEL_COMPATIBLE              equ     3
+CPUID_OTHER_CATEGORY                equ     4
+CPUID_HYPERVISOR                    equ     5
+CPUID_VENDOR_COUNT                  equ     29
+CPUID_VENDOR_TABLE_SIZE             equ     CPUID_VENDOR_COUNT * 12
+
+

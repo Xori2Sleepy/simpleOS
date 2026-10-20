@@ -54,7 +54,7 @@ stage2_entry:
     or      eax, 1              ; turn the first bits of cr0 on (Protection Enable, PE bits)
     push    eax
 
-    call    print_handling
+    call    print_handling      ; graphic shit
     jc      jmp32
 
     mov     si, msg_gdt
@@ -65,7 +65,7 @@ stage2_entry:
 jmp32:
     pop     eax
     mov     cr0, eax            ; protected mode officially on
-    jmp     kernelcode_32bits_descriptor:protected32_entry
+    jmp     kernelcode_32bits_descriptor:protected32_entry  ; misleading name change later
 
 ; ---------- functions ---------- 
 %include "src/boot/stage2/16bits/helper/a20.asm"
@@ -113,4 +113,4 @@ get_bios_cursor:
 ; ---------- just other stuff ----------
     scratchpad      equ     0x1000
 %include "src/boot/stage2/32bits/protected32.asm"  ; we seperate the 32bit code, look cleaner. It already a mess here.
-times 36864-($-$$)   db      0
+times 36864-($-$$)    db      0x69

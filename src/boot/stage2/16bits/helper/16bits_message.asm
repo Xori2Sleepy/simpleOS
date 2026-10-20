@@ -52,12 +52,18 @@ msg_disk_failed     db      "   Disk read error! Error code: ", 0
 msg_valid_memory    db      "   Valid memory found: loading full kernel...", 13, 10, 0
 msg_header_load_success db  "   Kernel header succesfully loaded", 13, 10, 0
 msg_header_load_failed  db  "   Kernel header fail to load. Continuing with execution...", 13, 10, 0
+
 msg_kernel_load_success     db      "   Kernel fully loaded!", 13, 10, 0
 msg_kernel_load_err_no_mem  db      "   CRITICAL: Can not identify a valid memory zone for kenel image! Halting the CPU!", 13, 10, 0
 msg_kernel_load_err_addr_below db   "   CRITICAL: Kernel load address in header is invalid! Halting the CPU!"
 msg_kernel_load_err_above_lim  db   "   CRITICAL: Valid load address found but it exist above 32 bits limit, "
                                db   "please check kerenl_reallocatiable flag! Halting the CPU!", 13, 10, 0
-msg_kernel_load_err_invalid_addr    db   "   CRITICAL: Given address is invalid!", 13, 10, 0
+msg_kernel_load_err_invalid_addr    db  "   CRITICAL: Given address is invalid!", 13, 10, 0
+msg_kernel_load_CHS db      "   BIOS can not utilize LBA service, CHS not supported: Terminating kernel loading procedure", 13, 10, 0
+msg_kernel_load_failed  db  "   Kernel failed to load. Terminating kernel loading procedure", 13, 10, 0
+msg_kernel_load_check_failed_retry  db  "CRC-32 checksum failed: attempting to reload the kernel...", 13, 10, 0
+msg_kernel_load_check_failed_fatal  db  "CRITICAL: CRC-32 checksum failed: halting the process...", 13, 10, 0
+msg_kernel_load_check_success   db  "   CRC 32 check passed, kernel successfully verfiy!", 13, 10, 0
 
 ; kernel read n stuff
 msg_unrecognized_magic  db  "   Unrecognized magic: kernel header could not be parsed", 13, 10, 0

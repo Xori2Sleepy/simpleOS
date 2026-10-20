@@ -164,12 +164,16 @@ cpu_xleaf2to4_detection:
     mov     [boot_info.brand_string + 4], ebx
     mov     [boot_info.brand_string + 8], ecx
     mov     [boot_info.brand_string + 12], edx
+
     mov     eax, 0x80000003
+    cpuid
     mov     [boot_info.brand_string + 16], eax
     mov     [boot_info.brand_string + 20], ebx
     mov     [boot_info.brand_string + 24], ecx
     mov     [boot_info.brand_string + 28], edx
+
     mov     eax, 0x80000004
+    cpuid
     mov     [boot_info.brand_string + 32], eax
     mov     [boot_info.brand_string + 36], ebx
     mov     [boot_info.brand_string + 40], ecx
@@ -202,6 +206,7 @@ cpu_xleaf1_detection:
 
     mov     eax, 0x80000001         ; copy eax, ebx, ecx, edx
     cpuid
+
     mov     [boot_info.cpu_featuresx1_ecx], ecx
     mov     [boot_info.cpu_featuresx1_edx], edx
 .done:
@@ -252,15 +257,3 @@ cpu_xleaf8_detection:
     mov     [boot_report], al
 
     ret
-
-; ------------------------------------------------
-;               constant space
-; ------------------------------------------------
-CPUID_AMD_CATEGORY                  equ     1
-CPUID_INTEL_CATEGORY                equ     2
-CPUID_INTEL_COMPATIBLE              equ     3
-CPUID_OTHER_CATEGORY                equ     4
-CPUID_HYPERVISOR                    equ     5
-CPUID_VENDOR_COUNT                  equ     29
-CPUID_VENDOR_TABLE_SIZE             equ     CPUID_VENDOR_COUNT * 12
-
