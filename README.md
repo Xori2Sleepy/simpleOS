@@ -5,6 +5,7 @@ WARNING: Run this bootloader and the kernel at YOUR OWN RISK. Although the bootl
 
 ## Table of Content
 - [Why build this?](#why-build-this?)
+- [How is it build?](#how-is-it-build?)
 - [Architecture and Boot sequence](#architecture-and-boot-sequence)
   - [Ram Layout](#ram-layout)
   - [Kernel Header](#kernel-header)
@@ -19,6 +20,25 @@ Honestly, curiosity was probably the biggest reason I started this project. I me
 There was another reason, though. I'd spent the past seven months learning assembly (as of July 2026 when I started the project), and I wanted to put that knowledge to use. Assembly is a powerful skill to have, but outside areas like low-level systems programming, firmware, and reverse engineering, opportunities to use it directly can be pretty limited. Building my own bootloader gave me an excuse to do something practical with it.
 
 More importantly, why not?
+
+## How is it build?
+This section gives a little insight into how the project started, how I build it, and some of the things I've learned along the way. It's not meant to be too technical.
+
+Long story short, I originally planned to write the kernel and give it a tiny bootloader to get it running (hence the name *Quick and Dirty Bootloader*). But after actually getting into bootloader programming, I got distracted by how fun it was and I somehow ended up with around 8,000 lines of assembly.
+
+One of the biggest challenges has been debugging, closely followed by the *"What does this even mean?"*. The [OSDev Wiki](https://wiki.osdev.org/) has been one of my main starting points. It provides a pretty comprehensive list of things to implement, although I did find that a lot the explaination on here quite confusing so I also consult other resources.
+
+Debugging has been its own adventure. I use GDB alongside QEMU, which means connecting to a debugging port and occasionally doing some address arithmetic just to get a breakpoint in the right place. For example, I have to take an instruction's offset from the NASM listing, account for where the code is loaded in memory, and then set a breakpoint at the resulting address. After that, it's a matter of examining memory with commands like `x/gx` and figuring out what on earth the machine is doing. Don't even get me started on memory corruption that seem to happen every few days and take hours to find.
+
+### Some Things I Used Along the Way
+A few resources I used. There is more but I only used it briefly so I did not bookmark it.
+
+- [OSDev Wiki](https://wiki.osdev.org/) — My general starting point for operating system development.
+- [Operating System Design: The X-Boot Project](https://www.fysnet.net/osdesign_book_series.htm) — A series of articles about designing an operating system from scratch.
+- [Operating Systems: From 0 to 1](https://github.com/tuhdo/os01/blob/master/Operating_Systems_From_0_to_1.pdf) — A book on building an operating system from the ground up.
+- [A20 Line — OSDev Wiki](https://wiki.osdev.org/A20_Line) — Useful for understanding one of the many little quirks of x86 booting.
+- [FreeVGA](http://www.osdever.net/FreeVGA/vga/crtcreg.htm) — Documentation on VGA hardware and its registers.
+- [Ralf Brown's Interrupt List](https://www.ctyme.com/intr/alpha.htm) — A reference for old PC BIOS interrupts and low-level system interfaces.
 
 ## Architecture and Boot sequence
 
@@ -223,51 +243,20 @@ At this point, the bootloader has completed its transition into long mode and is
 
 Several important routines have already been explained in the [Boot Sequence](#boot-sequence). This section provides an overview of the main features and links to their implementations or explanations where appropriate.
 
-- **[Memory Detection and Memory Map Processing](#16-bits)** — Detects available physical memory through BIOS interfaces, processes the memory map, and prepares it for kernel loading.
-  - `detect_memory_e820`
-  - `memory_map_sanitation`
-
-- **[Kernel Loading and Header Validation](#16-bits)** — Reads the kernel header, validates its magic value, and loads the kernel into a suitable physical memory region.
-  - `kernel_header_load`
-  - `kernel_header_read`
-  - `kernel_load_16`
-
-- **[CPU Detection and Compatibility Checks](#16-bits)** — Collects CPU information and checks whether the processor supports the features required by the kernel.
-  - `get_cpuid`
-  - `kernel_check_required_cpu`
-  - `kernel_check_required_flags`
-
-- **[Real Mode to Protected Mode Transition](#16-bits)** — Prepares the GDT and processor state before transferring execution to the 32-bit portion of Stage 2.
-
-- **[Protected Mode and Kernel Handoff](#32-bits---protected-mode)** — Initializes the 32-bit execution environment and selects between a direct 32-bit kernel handoff and the long-mode path.
-  - `protected32_entry`
-  - `kernel_stack_compute`
-  - `check_long_mode_paging`
-  - `jmp_long_mode`
-
-- **[Long-Mode Transition and Kernel Handoff](#64-bits--long-mode)** — Continues initialization in 64-bit mode and transfers execution to the kernel's entry point.
-  - `long64_entry`
-  - `halt64`
-
-- **[Terminal Abstraction](#terminal-abstraction)** — Provides a common interface for printing text, changing colors, clearing the screen, and moving the cursor in both VGA text mode and VBE framebuffer mode.
-  - `terminal_initialize` / `terminal_initialize_64`
-  - `terminal_print_char64`
-  - `terminal_print_string64`
-  - `terminal_clear_screen_64`
-  - `terminal_move_cursor_64`
-
-- **[Graphics and Display Routines](#terminal-abstraction)** — Implements the lower-level drawing operations used by the terminal's VBE framebuffer backend.
-  - `draw_pixel64`
-  - `draw_char64`
-  - `draw_string64`
-  - `vbe_clear_screen64`
-
-- **[Boot Diagnostics](#16-bits)** — Records information about detected hardware, compatibility fallbacks, and mode transitions in `boot_report`, allowing later stages to inspect the boot process.
+- **Memory Map Processing** — Collects the BIOS memory map, sorts entries, and merges compatible regions to prepare the map for later memory allocation. See [16-bit Mode](#16-bits).
+- **Kernel Loading and Relocation** — Loads the kernel in chunks using a temporary low-memory buffer, checks whether the requested memory region is suitable, and searches for another region when relocation is allowed. See [16-bit Mode](#16-bits).
+- **Kernel Header Validation** — Reads the `QADB` kernel header and checks its magic value before using the header information to load and launch the kernel. See [16-bit Mode](#16-bits).
+- **Kernel Memory and Stack Setup** — Checks kernel memory requirements and computes the kernel stack configuration from the header's settings. See [16-bit Mode](#16-bits) and [32-bit Protected Mode](#32-bits---protected-mode).
+- **CPU and Feature Compatibility** — Checks processor capabilities and verifies the kernel's declared CPU and execution requirements before handing over control. See [16-bit Mode](#16-bits) and [32-bit Protected Mode](#32-bits---protected-mode).
+- **Real Mode and Protected Mode Transition** — Prepares the GDT, configures the processor, and transfers execution from 16-bit real mode into 32-bit protected mode. See [16-bit Mode](#16-bits).
+- **32-bit and 64-bit Kernel Handoff** — Supports both direct handoff to a 32-bit kernel and a transition into long mode for a 64-bit kernel. The kernel entry address is calculated using the actual load address and the entry offset from the header. See [32-bit Protected Mode](#32-bits---protected-mode) and [64-bit Long Mode](#64-bits--long-mode).
+- **Boot Information and Diagnostics** — Maintains boot information and diagnostic flags, including the effective kernel load address, memory map, and recorded boot-stage status, for later stages to inspect.
+- **Terminal Abstraction** — Provides a shared interface for printing strings and characters, changing colors, clearing the screen, and moving the cursor through VGA text mode or VBE framebuffer output. See [Terminal Abstraction](#terminal-abstraction).
+- **Framebuffer Drawing** — Includes lower-level routines for drawing pixels and bitmap-font characters, rendering strings, and clearing the framebuffer. See [Terminal Abstraction](#terminal-abstraction).
+- **Failure Handling** — Stops the boot process when essential operations fail, such as memory detection, kernel-header validation, kernel loading, or required CPU-feature checks. Certain operations also support fallback methods, with selected fallback decisions recorded for diagnostics.
 
 ### Terminal Abstraction
-
 The terminal abstraction is implemented in both 32-bit and 64-bit modes. Although their implementations differ, both provide a similar interface for displaying text without requiring the caller to manage the underlying display hardware directly.
-
 The terminal selects between **VGA text output** and **VBE framebuffer output** using bit 3 of `boot_report`. This allows the same general printing interface to work with either display path.
 
 The main functions are:
@@ -300,3 +289,46 @@ The VBE string renderer also supports a small set of escape sequences when enabl
 Here, `X` represents a hexadecimal color digit. The renderer also handles line feed (`LF`) and carriage return (`CR`) characters, allowing messages to span multiple lines.
 
 The main advantage of this design is that code displaying boot messages does not need to know how characters are drawn, how framebuffer pixels are addressed, or how VGA text attributes are encoded. Those details remain inside the terminal and its underlying display drivers.
+
+## Project Layout
+This section will talk about the project layout of both the bootloader and the Kernel
+
+- `src/boot/` — Contains the bootloader, divided into Stage 1 and Stage 2. Stage 1 handles the initial boot, while Stage 2 contains the main bootloader logic and is organized by CPU execution mode.
+  - `stage1/` — Stage 1 bootloader.
+  - `stage2/16bits/` — Real-mode code for early initialization, BIOS services, hardware detection, memory-map discovery, and kernel loading.
+  - `stage2/32bits/` — Protected-mode code for system setup, paging, graphics, terminal interfaces, and preparation for entering the kernel.
+  - `stage2/64bits/` — Long-mode code and supporting graphics and terminal components.
+
+- `src/kernel/` — Contains the kernel and its supporting build files. UNDER DEVELOPMENT
+  - `arch/x86_64/` — Architecture-specific kernel setup and interrupt handling.
+  - `drivers/` — Kernel driver components.
+  - `include/` — Shared data structures and definitions used across the kernel's assembly and C code.
+  - The kernel's root directory also contains the kernel entry point, main C source, linker script, and binary finalization script.
+
+- `target/` — Contains generated build artifacts, organized by purpose. This folder should be generated when running the makefile.
+  - `bin/` — Compiled bootloader stages.
+  - `lst/` — Assembly listing files for debugging and inspection.
+  - `kernel/` — Kernel build outputs, including object files, the linked ELF image, and the finalized kernel binary.
+  - `debug/` — Debug-related build artifacts.
+  - `boot.bin` — The combined bootable image.
+
+- `Makefile` — Defines the build process for assembling the bootloader, compiling and linking the kernel, finalizing the kernel image, and combining the components.
+- `CRC32.py` — Provides checksum calculation support for binary images. Currently unused
+
+## Build Requirements
+The following tools are required or recommended to build, test, and develop the operating system.
+
+### Required
+- **GNU Make** — Automates the build process using the `Makefile`.
+- **NASM** — Assembles the bootloader and kernel assembly source files.
+- **GNU Binutils** — Provides `ld` for linking and `objcopy` for converting the kernel ELF into a flat binary.
+- **Python 3** — Runs scripts for kernel image finalization and CRC32 checksum calculation.
+- **GNU Coreutils** — Provides utilities such as `cat`, `mkdir`, and `rm`.
+- **GNU Findutils** — Provides `find` for automatic kernel source discovery.
+- **GNU/Linux environment** — Recommended development environment for the current build setup.
+- **GCC** — A C compiler for developing the kernel in C alongside assembly.
+- **x86_64-elf cross-compilation toolchain** — Provides a compiler and associated tools targeting the x86-64 bare-metal environment, avoiding reliance on the host system's default compilation target.
+
+### Testing and Debugging
+- **QEMU (`qemu-system-x86_64`)** — Runs the bootable image in an emulated x86-64 machine.
+- **GDB** — Enables debugging of the bootloader and kernel through QEMU's GDB interface.
