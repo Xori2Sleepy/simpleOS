@@ -13,6 +13,7 @@ WARNING: Run this bootloader and the kernel at YOUR OWN RISK. Although the bootl
 - [Key Features](#key-features)
 - [Project Layout](#project-layout)
 - [Build requirement](#build-requirement)
+- [Contact](#contact)
 
 ## Why build this?
 Honestly, curiosity was probably the biggest reason I started this project. I mean who wound't want to know what happen underneath your programs?
@@ -20,6 +21,8 @@ Honestly, curiosity was probably the biggest reason I started this project. I me
 There was another reason, though. I'd spent the past seven months learning assembly (as of July 2026 when I started the project), and I wanted to put that knowledge to use. Assembly is a powerful skill to have, but outside areas like low-level systems programming, firmware, and reverse engineering, opportunities to use it directly can be pretty limited. Building my own bootloader gave me an excuse to do something practical with it.
 
 More importantly, why not?
+
+---
 
 ## How is it build?
 This section gives a little insight into how the project started, how I build it, and some of the things I've learned along the way. It's not meant to be too technical.
@@ -39,6 +42,8 @@ A few resources I used. There is more but I only used it briefly so I did not bo
 - [A20 Line — OSDev Wiki](https://wiki.osdev.org/A20_Line) — Useful for understanding one of the many little quirks of x86 booting.
 - [FreeVGA](http://www.osdever.net/FreeVGA/vga/crtcreg.htm) — Documentation on VGA hardware and its registers.
 - [Ralf Brown's Interrupt List](https://www.ctyme.com/intr/alpha.htm) — A reference for old PC BIOS interrupts and low-level system interfaces.
+
+---
 
 ## Architecture and Boot sequence
 
@@ -239,6 +244,8 @@ The 64-bit portion of Stage 2 executes after the processor has transitioned into
 
 At this point, the bootloader has completed its transition into long mode and is ready to transfer execution to the kernel. The kernel entry address is calculated at runtime using the effective physical load address and the image-relative entry offset, allowing the entry point to follow the kernel's actual load location.
 
+---
+
 ## Key Features
 
 Several important routines have already been explained in the [Boot Sequence](#boot-sequence). This section provides an overview of the main features and links to their implementations or explanations where appropriate.
@@ -290,6 +297,8 @@ Here, `X` represents a hexadecimal color digit. The renderer also handles line f
 
 The main advantage of this design is that code displaying boot messages does not need to know how characters are drawn, how framebuffer pixels are addressed, or how VGA text attributes are encoded. Those details remain inside the terminal and its underlying display drivers.
 
+---
+
 ## Project Layout
 This section will talk about the project layout of both the bootloader and the Kernel
 
@@ -315,6 +324,8 @@ This section will talk about the project layout of both the bootloader and the K
 - `Makefile` — Defines the build process for assembling the bootloader, compiling and linking the kernel, finalizing the kernel image, and combining the components.
 - `CRC32.py` — Provides checksum calculation support for binary images. Currently unused
 
+---
+
 ## Build Requirements
 The following tools are required or recommended to build, test, and develop the operating system.
 
@@ -332,3 +343,10 @@ The following tools are required or recommended to build, test, and develop the 
 ### Testing and Debugging
 - **QEMU (`qemu-system-x86_64`)** — Runs the bootable image in an emulated x86-64 machine.
 - **GDB** — Enables debugging of the bootloader and kernel through QEMU's GDB interface.
+
+---
+
+## Contact
+
+- **Email:** PA25510289@gmail.com - It might take a few days for me to reply, I don't usually read gmail 😅😅
+- **Issues:** Use [GitHub Issues](../../issues) for bug reports and technical questions.
