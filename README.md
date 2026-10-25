@@ -1,5 +1,7 @@
-# x86 Bootloader
-A custom bootloader written in NASM assembly for x86 systems, responsible for loading a kernel from disk, preparing the processor and memory environment, and transferring control to the kernel.
+# (Not So) Quick and Dirty Bootloader (QADB)
+A custom semi-general purpose bootloader written in assembly for x86 little-endian systems, responsible for loading a kernel from disk, preparing the processor and memory environment, and transferring control to the kernel. The bootloader itself is assemble using NASM and the image is build using Makefile as a flat assembly format for simplicity, it and have it own custom kernel header format to pass metadata and information to the bootloader. It is build with a goal to support any kernel that can make use of the available boot service, though the kernel might need to be modify in order to read the boot infomration that passed by the bootloader hence it is semi-general purpose. Notes that the detail provided above may change as the project are being continuously update, especially the point about how it is build and assemble. 
+
+WARNING: Run this bootloader and the kernel at YOUR OWN RISK. Although the bootloader lack disk-writing functions (for now) and the most damage it can do is soft-bricking your computers, various factor can potentially harm or lead to unwanted behaviors in the machine. I take no responsibility if the user's machine got damage in running my program.
 
 ## Table of Content
 - [Why build this?](#why-build-this?)
@@ -137,4 +139,36 @@ Several fields are reserved or not yet fully specified, including `header_versio
 Though the Quick And Dirty (QAD) bootloader is intended to be general purpose, the current kernel header may still lack some needed boot service. But for a basic toy-kernel, the boot service already provided should more than sufficient.
 
 ### Boot sequence
+The following is the intended boot sequence. Notes that this is not intended to be a detail technical documentation, it is only a brief overview of what is actually happening in the bootloader.
 
+#### Stage 1
+The legacy bios load stage 1 (512 bytes at the start of the image) that end in the 2 bytes boot signature into `0x0000:0x7c00`. First stage main jobs is to load stage 2 from disk (located exactly 512 bytes from starting address) to `0x0000:0x7e00`. It can use either older CHS or the newer logical block addressing (LBA) to perform it intended purpose, if it failed it will attempt to reload the disk and perform the operation for a few more time before halting the CPU.
+
+#### Stage 2
+Stage 2 is split in 3 main subsection: 16 bits, 32 bits, and 64 bits.
+
+##### 16 bits
+| Order | Function | Description and failure handling |
+|---:|---|---|
+| 1 | `get_cpuid` | Checks whether the processor supports the `CPUID` instruction before attempting to query processor capabilities. It then collects information needed by later stages, including information about the available CPU features. If `CPUID` is unavailable, the boot process pauses rather than proceeding as though the required processor information had been obtained. If important leaves return missing or unexpected information, the function records the problem in `boot_report` for later inspection. |
+| 2 | `enable_a20` | Enables the A20 address line, allowing the processor to address memory above the first megabyte without the address wrapping around at the 1 MiB boundary. This is necessary for the subsequent memory operations and loading the kernel into higher physical addresses. The implementation uses fallback methods to improve compatibility with different BIOS and hardware environments. It also retains commented-out, less common techniques for unusual systems. These are intentionally not enabled by default because their behavior may depend on the specific hardware or platform; users familiar with the relevant systems can investigate and enable them when appropriate. |
+| 3 | `detect_memory_e820` | Queries the BIOS for the system memory map using the E820 interface. The returned entries describe memory regions and their types, providing the information needed to determine which physical memory ranges are usable. The function also performs some initial cleanup of the collected entries. If E820 fails, the implementation has an E801 fallback path. When that fallback is used, the boot report records that the memory map came from E801, allowing later stages or the kernel to distinguish it from a successful E820 result. If both methods fail, the bootloader halts. |
+| 4 | `memory_map_sanitation` | Processes the collected memory map before it is used for memory allocation. Since the E820 collection routine already performs some basic cleanup, this function focuses primarily on organizing and consolidating the entries. It sorts the entries using a variation of insertion sort and merges compatible adjacent or overlapping regions where appropriate. This produces a more consistent memory map for subsequent address-selection and allocation decisions. |
+| 5 | `kernel_header_load` | Reads the kernel header from disk into temporary scratch space before copying its fields into the bootloader's designated data structure. The header provides information needed to decide how to load and enter the kernel. This routine supports both CHS and LBA disk-reading methods. If the header cannot be loaded successfully, the bootloader halts. |
+| 6 | `kernel_header_read` | Examines the loaded header and checks that it is valid enough to be used by the bootloader. This includes checking the header's magic value (`QADB`) and rejecting a header whose magic does not match. Invalid header data causes the bootloader to halt instead of continuing with an unrecognized kernel image. |
+| 7 | `kernel_load_16` | Loads the kernel image into its selected physical memory location. Rather than loading the entire image directly into its final destination in one operation, the routine reads chunks into a temporary low-memory scratch area and then copies them to the destination. It uses unreal mode to access memory beyond the ordinary real-mode addressing limit while retaining the ability to use BIOS disk services. Before loading, it checks whether the requested physical address and image size can be accommodated. If the preferred location is unavailable, the `KERNEL_REALLOCATABLE` header flag determines whether the loader is allowed to search for another suitable memory region. If relocation is not permitted, or no suitable region can be found, the bootloader halts. |
+| 8 | `get_bios_cursor` | Saves the current BIOS text-mode cursor position before leaving real mode. It converts the row and column into a flat text-cell index using `(row × 80) + column` and stores the result in scratch memory. This allows later code to preserve the cursor position when transitioning to a graphics or protected-mode environment, rather than unnecessarily clearing or restarting the text display. |
+| 9 | `lgdt` and protected-mode preparation | Disables interrupts, masks non-maskable interrupts through the CMOS/NMI control port, and loads the Global Descriptor Table (GDT) descriptor into the processor's GDTR register. It then prepares the value of `CR0` with the Protection Enable (`PE`) bit set. The bootloader also performs its final pre-transition display handling. |
+| 10 | Protected-mode transition | Writes the prepared value to `CR0`, enabling protected mode, and performs a far jump through the 32-bit code-segment descriptor to `protected32_entry`. Execution then continues in the 32-bit portion of Stage 2. |
+
+The CPUID, A20, memory-detection, memory-map processing, header-loading, header-validation, and kernel-loading routines run in that order. The later display handling and GDT setup prepare the processor to leave real mode.
+
+**Failure policy:** The bootloader distinguishes between recoverable compatibility fallbacks and conditions that make it unsafe to continue. For example, it can try another disk-addressing method or memory-detection interface, but it stops when required processor information is unavailable, memory detection fails entirely, the kernel header is invalid, or the kernel cannot be loaded into a suitable region.
+
+#### Notes on compatibility and fallback behavior
+
+Some hardware initialization routines contain additional fallback methods beyond the common paths. The A20 routine is one example: the default path covers the primary methods, while less common techniques remain commented out for users who have a specific reason to test them. These methods should not be treated as universally safe or reliable across all machines.
+
+Likewise, the E801 memory-detection fallback is not equivalent to a successful E820 memory map. The boot report records the fallback so that later code can identify the source of the memory information and decide whether it meets the system's requirements.
+
+The boot report is intended to preserve diagnostic information about these decisions rather than silently treating every fallback as an ordinary success.
