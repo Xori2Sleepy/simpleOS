@@ -22,7 +22,7 @@ There was another reason, though. I'd spent the past seven months learning assem
 
 More importantly, why not?
 
----
+
 
 ## How is it build?
 This section gives a little insight into how the project started, how I build it, and some of the things I've learned along the way. It's not meant to be too technical.
@@ -43,7 +43,7 @@ A few resources I used. There is more but I only used it briefly so I did not bo
 - [FreeVGA](http://www.osdever.net/FreeVGA/vga/crtcreg.htm) — Documentation on VGA hardware and its registers.
 - [Ralf Brown's Interrupt List](https://www.ctyme.com/intr/alpha.htm) — A reference for old PC BIOS interrupts and low-level system interfaces.
 
----
+
 
 ## Architecture and Boot sequence
 
@@ -244,7 +244,7 @@ The 64-bit portion of Stage 2 executes after the processor has transitioned into
 
 At this point, the bootloader has completed its transition into long mode and is ready to transfer execution to the kernel. The kernel entry address is calculated at runtime using the effective physical load address and the image-relative entry offset, allowing the entry point to follow the kernel's actual load location.
 
----
+
 
 ## Key Features
 
@@ -297,7 +297,7 @@ Here, `X` represents a hexadecimal color digit. The renderer also handles line f
 
 The main advantage of this design is that code displaying boot messages does not need to know how characters are drawn, how framebuffer pixels are addressed, or how VGA text attributes are encoded. Those details remain inside the terminal and its underlying display drivers.
 
----
+
 
 ## Project Layout
 This section will talk about the project layout of both the bootloader and the Kernel
@@ -324,7 +324,7 @@ This section will talk about the project layout of both the bootloader and the K
 - `Makefile` — Defines the build process for assembling the bootloader, compiling and linking the kernel, finalizing the kernel image, and combining the components.
 - `CRC32.py` — Provides checksum calculation support for binary images. Currently unused
 
----
+
 
 ## Build Requirements
 The following tools are required or recommended to build, test, and develop the operating system.
