@@ -6,6 +6,12 @@ WARNING: Run this bootloader and the kernel at YOUR OWN RISK. Although the bootl
 ## Table of Content
 - [Why build this?](#why-build-this?)
 - [Architecture and Boot sequence](#architecture-and-boot-sequence)
+  - [Ram Layout](#ram-layout)
+  - [Kernel Header](#kernel-header)
+  - [Boot sequence](#boot-sequence)
+- [Key Features](#key-features)
+- [Project Layout](#project-layout)
+- [Build requirement](#build-requirement)
 
 ## Why build this?
 Honestly, curiosity was probably the biggest reason I started this project. I mean who wound't want to know what happen underneath your programs?
