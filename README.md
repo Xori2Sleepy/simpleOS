@@ -218,3 +218,85 @@ The 64-bit portion of Stage 2 executes after the processor has transitioned into
 | 6 | `halt64` | Provides a permanent halt routine that prints a diagnostic message, disables interrupts, and repeatedly executes `HLT`. It is intended for situations where execution cannot safely continue. |
 
 At this point, the bootloader has completed its transition into long mode and is ready to transfer execution to the kernel. The kernel entry address is calculated at runtime using the effective physical load address and the image-relative entry offset, allowing the entry point to follow the kernel's actual load location.
+
+## Key Features
+
+Several important routines have already been explained in the [Boot Sequence](#boot-sequence). This section provides an overview of the main features and links to their implementations or explanations where appropriate.
+
+- **[Memory Detection and Memory Map Processing](#16-bits)** — Detects available physical memory through BIOS interfaces, processes the memory map, and prepares it for kernel loading.
+  - `detect_memory_e820`
+  - `memory_map_sanitation`
+
+- **[Kernel Loading and Header Validation](#16-bits)** — Reads the kernel header, validates its magic value, and loads the kernel into a suitable physical memory region.
+  - `kernel_header_load`
+  - `kernel_header_read`
+  - `kernel_load_16`
+
+- **[CPU Detection and Compatibility Checks](#16-bits)** — Collects CPU information and checks whether the processor supports the features required by the kernel.
+  - `get_cpuid`
+  - `kernel_check_required_cpu`
+  - `kernel_check_required_flags`
+
+- **[Real Mode to Protected Mode Transition](#16-bits)** — Prepares the GDT and processor state before transferring execution to the 32-bit portion of Stage 2.
+
+- **[Protected Mode and Kernel Handoff](#32-bits---protected-mode)** — Initializes the 32-bit execution environment and selects between a direct 32-bit kernel handoff and the long-mode path.
+  - `protected32_entry`
+  - `kernel_stack_compute`
+  - `check_long_mode_paging`
+  - `jmp_long_mode`
+
+- **[Long-Mode Transition and Kernel Handoff](#64-bits--long-mode)** — Continues initialization in 64-bit mode and transfers execution to the kernel's entry point.
+  - `long64_entry`
+  - `halt64`
+
+- **[Terminal Abstraction](#terminal-abstraction)** — Provides a common interface for printing text, changing colors, clearing the screen, and moving the cursor in both VGA text mode and VBE framebuffer mode.
+  - `terminal_initialize` / `terminal_initialize_64`
+  - `terminal_print_char64`
+  - `terminal_print_string64`
+  - `terminal_clear_screen_64`
+  - `terminal_move_cursor_64`
+
+- **[Graphics and Display Routines](#terminal-abstraction)** — Implements the lower-level drawing operations used by the terminal's VBE framebuffer backend.
+  - `draw_pixel64`
+  - `draw_char64`
+  - `draw_string64`
+  - `vbe_clear_screen64`
+
+- **[Boot Diagnostics](#16-bits)** — Records information about detected hardware, compatibility fallbacks, and mode transitions in `boot_report`, allowing later stages to inspect the boot process.
+
+### Terminal Abstraction
+
+The terminal abstraction is implemented in both 32-bit and 64-bit modes. Although their implementations differ, both provide a similar interface for displaying text without requiring the caller to manage the underlying display hardware directly.
+
+The terminal selects between **VGA text output** and **VBE framebuffer output** using bit 3 of `boot_report`. This allows the same general printing interface to work with either display path.
+
+The main functions are:
+
+| Function | Purpose |
+|---|---|
+| `terminal_print_char64` | Prints a single character using the selected display backend. |
+| `terminal_print_string64` | Prints a null-terminated string, with support for newline and carriage-return handling. It also supports simple escape sequences for changing colors. |
+| `terminal_clear_screen_64` | Clears the screen using the requested background color. This operation does not move the cursor, so cursor positioning must be handled separately. |
+| `terminal_move_cursor_64` | Moves the cursor by a relative row and column offset. The VBE implementation normalizes positions that exceed the available grid. |
+
+For `terminal_print_string64`, the calling convention is:
+
+| Register | Input |
+|---|---|
+| `EDI` | Pointer to a null-terminated string |
+| `ESI` | Background color index (`0`–`F`) |
+| `EDX` | Foreground color index (`0`–`F`) |
+
+The color arguments use hexadecimal color indices rather than requiring callers to provide raw framebuffer color values. In VBE mode, the terminal translates these indices through a color preset table. In VGA mode, the indices are combined into the conventional text attribute byte.
+
+The VBE string renderer also supports a small set of escape sequences when enabled:
+
+| Sequence | Effect |
+|---|---|
+| `\\` | Prints a literal backslash. |
+| `\aX` | Changes the background color to preset `X`. |
+| `\bX` | Changes the foreground color to preset `X`. |
+
+Here, `X` represents a hexadecimal color digit. The renderer also handles line feed (`LF`) and carriage return (`CR`) characters, allowing messages to span multiple lines.
+
+The main advantage of this design is that code displaying boot messages does not need to know how characters are drawn, how framebuffer pixels are addressed, or how VGA text attributes are encoded. Those details remain inside the terminal and its underlying display drivers.
