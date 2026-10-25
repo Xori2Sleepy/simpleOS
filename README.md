@@ -12,7 +12,7 @@ WARNING: Run this bootloader and the kernel at YOUR OWN RISK. Although the bootl
   - [Boot sequence](#boot-sequence)
 - [Key Features](#key-features)
 - [Project Layout](#project-layout)
-- [Build requirement](#build-requirement)
+- [Build requirements](#build-requirements)
 - [Contact](#contact)
 
 ## Why build this?
