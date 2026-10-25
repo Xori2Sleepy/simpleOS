@@ -12,7 +12,6 @@ There was another reason, though. I'd spent the past seven months learning assem
 
 More importantly, why not?
 
-
 ## Architecture and Boot sequence
 
 ### RAM layout
@@ -34,25 +33,24 @@ The bootloader mainly operate inside the low-memory (under 1mb) (with the except
 | `0x0A0000–0x0BFFFF` | 128 KiB | **Video Memory.** Memory-mapped video regions; availability depends on the active display mode and hardware. |
 | `0x0C0000–0x0FFFFF` | 256 KiB | **Video ROM and System Firmware.** Memory-mapped option ROM and system BIOS regions. |
 
-## Reserved Paging Memory
 
-### Higher-Half Paging
+#### Higher-Half Paging
 
 The higher-half paging structures begin at physical address `0x5F000`. This region is reserved for constructing the mappings required to access the kernel at its higher-half virtual address.
 
-### Boot-Time Paging
+#### Boot-Time Paging
 
 The initial paging structures begin at physical address `0x80000`. They are used to establish the mappings required for the transition into 64-bit mode and the initial kernel environment, covering the intended physical address range of approximately 1–4 GiB depending.
 
 The actual coverage depends on the paging levels and entries configured by the bootloader, main variable include the VBE's framebuffer location.
 
-## Scratch Pad
+#### Scratch Pad
 
 The scratch pad begins at physical address `0x1000`. It provides temporary storage for bootloader routines and intermediate data.
 
 The available space is bounded by reserved memory regions and any additional allocations made during boot. Individual routines must ensure that their buffers do not overlap the bootloader, paging structures, or other live data.
 
-## Notes
+#### Notes
 
 - All addresses in this section above refer to **physical addresses**, unless explicitly stated otherwise.
 - The memory map describes the bootloader's intended reservations, not a guarantee that every unreserved address is available RAM.
@@ -64,7 +62,7 @@ The kernel image begins with a custom header identified by the four-byte magic v
 
 The bootloader uses this metadata to determine how the kernel should be loaded and initialized.
 
-### Header Structure
+#### Header Structure
 
 | Field | Size | Description |
 |:---|---:|:---|
@@ -137,3 +135,6 @@ The `image_size` and `check_sum` fields can finalized by the build-time Python s
 Several fields are reserved or not yet fully specified, including `header_version`, `kernel_version`, `kernel_name`, `alignment`, and `entry32`.
 
 Though the Quick And Dirty (QAD) bootloader is intended to be general purpose, the current kernel header may still lack some needed boot service. But for a basic toy-kernel, the boot service already provided should more than sufficient.
+
+### Boot sequence
+
