@@ -4,8 +4,8 @@ A custom semi-general purpose bootloader written in assembly for x86 little-endi
 WARNING: Run this bootloader and the kernel at YOUR OWN RISK. Although the bootloader lack disk-writing functions (for now) and the most damage it can do is soft-bricking your computers, various factor can potentially harm or lead to unwanted behaviors in the machine. I take no responsibility if the user's machine got damage in running my program.
 
 ## Table of Content
-- [Why build this?](#why-build-this?)
-- [How is it build?](#how-is-it-build?)
+- [Why build this?](#why-build-this)
+- [How is it build?](#how-is-it-build)
 - [Architecture and Boot sequence](#architecture-and-boot-sequence)
   - [Ram Layout](#ram-layout)
   - [Kernel Header](#kernel-header)
