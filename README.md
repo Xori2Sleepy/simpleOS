@@ -172,3 +172,43 @@ Some hardware initialization routines contain additional fallback methods beyond
 Likewise, the E801 memory-detection fallback is not equivalent to a successful E820 memory map. The boot report records the fallback so that later code can identify the source of the memory information and decide whether it meets the system's requirements.
 
 The boot report is intended to preserve diagnostic information about these decisions rather than silently treating every fallback as an ordinary success.
+
+##### 32 bits - protected mode
+
+The 32-bit portion of Stage 2 runs after the processor has entered protected mode. At this point, the bootloader can use its protected-mode terminal and graphics routines, perform the final kernel compatibility checks, and prepare the environment required to transfer control to the kernel.
+
+The bootloader supports two possible handoff paths: launching a 32-bit kernel directly, or enabling long mode and transferring execution to the 64-bit portion of Stage 2 first.
+
+| Order | Function or operation | Description and failure handling |
+|---:|---|---|
+| 1 | `protected32_entry` | Entry point for the 32-bit protected-mode portion of Stage 2. Interrupts are disabled, and the data-segment registers (`DS`, `SS`, `ES`, `FS`, and `GS`) are initialized using the 32-bit kernel data-segment descriptor. The stack pointer is set to physical address `0x7C00`, establishing a known stack location before further initialization. |
+| 2 | `terminal_initialize` | Initializes the bootloader's terminal interface. This provides a consistent way for subsequent routines to display status messages and diagnostic information in protected mode. |
+| 3 | `terminal_print_string32` | Displays a welcome message indicating that execution has reached the 32-bit portion of the bootloader. The call uses the bootloader's terminal interface, passing the message address, starting position, and display attribute through registers. |
+| 4 | `kernel_stack_compute` | Computes the stack configuration to be used by the kernel. This prepares the stack information required for the eventual handoff, based on the kernel's configured stack parameters and the bootloader's allocation logic. |
+| 5 | `kernel_check_required_cpu` | Checks the CPU features required by the kernel, using the requirements stored in `kernel_info.required_cpu`. The function receives the address of the requirement data. If the required CPU features are unavailable, it returns with the carry flag set and the bootloader stops the launch sequence. |
+| 6 | `kernel_check_required_flags` | Checks whether the kernel's required execution or boot features can be satisfied by the current bootloader environment. If a required condition cannot be met, the function signals failure through the carry flag, and the bootloader displays a requirement-failure message before halting. |
+| 7 | `check_long_mode_paging` | Determines whether the kernel's configuration requires the long-mode execution path and the associated paging setup. If long mode is required, the function returns with the carry flag set and execution branches to `jmp_long_mode`. Otherwise, the bootloader proceeds with the direct 32-bit kernel handoff. |
+| 8A | Direct 32-bit kernel handoff | If long mode is not required, the bootloader prepares the handoff registers: `EAX` receives the address of `boot_info`, and `DI` receives the kernel data-segment selector. It calculates the kernel's physical entry address by adding `kernel_info.entry32` to `boot_info.effective_load_address`. The resulting address and the 32-bit code-segment selector are stored in a far pointer, and execution transfers to the kernel using a far indirect jump. If execution unexpectedly continues past the jump, the CPU is halted. |
+| 8B | `jmp_long_mode` | If long mode is required, the bootloader enables the CPU's long-mode feature by setting the Long Mode Enable (`LME`) bit in the Extended Feature Enable Register (`EFER`), accessed through the `IA32_EFER` model-specific register. It then sets the Paging (`PG`) bit in `CR0` and performs a far jump through the 64-bit code-segment descriptor to `long64_entry`. This transfers execution to the 64-bit portion of Stage 2, which continues the transition into 64-bit operation. |
+| 9 | `halt32` | Provides a protected-mode halt routine. It prints a CPU-halted message, disables interrupts, and enters a permanent `HLT` loop. This prevents the bootloader from continuing when execution cannot safely proceed. |
+
+The CPU and kernel compatibility checks occur before either handoff path. This prevents the bootloader from knowingly launching a kernel when its declared CPU or execution requirements are not satisfied.
+
+**Direct 32-bit handoff.** When the kernel does not require long mode, the bootloader calculates the entry address from the kernel's actual physical load address and its image-relative entry offset. It then performs a far indirect jump using the kernel code-segment selector. This allows the kernel to be loaded at a different physical address without requiring the entry point to be hardcoded.
+
+**64-bit handoff.** When the kernel requires long mode, Stage 2 enables the CPU's long-mode and paging controls, then transfers to the 64-bit entry point. The 64-bit portion is responsible for continuing the transition and preparing the final execution environment for a 64-bit kernel.
+
+##### 64 bits — Long-mode
+
+The 64-bit portion of Stage 2 executes after the processor has transitioned into long mode.
+
+| Order | Function or operation | Description |
+|---:|---|---|
+| 1 | `long64_entry` | Entry point for the 64-bit portion of Stage 2. The segment registers are initialized to selector `0`, and the stack pointer is set to `0x7C00`. This establishes the initial execution environment before the remaining setup. |
+| 2 | `terminal_initialize_64` | Initializes the 64-bit terminal interface so that the bootloader can continue displaying status messages after entering long mode. |
+| 3 | Update `boot_report` | Sets bit 6 of `boot_report` to record that the processor has successfully reached long mode. This provides diagnostic information for later stages and the kernel. |
+| 4 | `terminal_print_string64` | Prints confirmation that long mode has been entered successfully, followed by a message indicating that control is about to be transferred to the kernel. |
+| 5 | Kernel handoff | Places the address of `boot_info` in `RAX` and the data-segment selector in `DI`. It calculates the kernel's physical entry address by adding `kernel_info.entry64` to `boot_info.effective_load_address`, then jumps directly to the resulting address. Because the processor is already executing in 64-bit mode, the handoff uses a normal indirect jump rather than another far jump. |
+| 6 | `halt64` | Provides a permanent halt routine that prints a diagnostic message, disables interrupts, and repeatedly executes `HLT`. It is intended for situations where execution cannot safely continue. |
+
+At this point, the bootloader has completed its transition into long mode and is ready to transfer execution to the kernel. The kernel entry address is calculated at runtime using the effective physical load address and the image-relative entry offset, allowing the entry point to follow the kernel's actual load location.
