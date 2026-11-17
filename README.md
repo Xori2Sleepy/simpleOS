@@ -344,9 +344,22 @@ The following tools are required or recommended to build, test, and develop the 
 - **QEMU (`qemu-system-x86_64`)** — Runs the bootable image in an emulated x86-64 machine.
 - **GDB** — Enables debugging of the bootloader and kernel through QEMU's GDB interface.
 
+## Toy Kernel?
+
+Informal report:
+It's a monolithic kernel aimed to be a test toy kernel for my QADB bootloader (for now). I designed it such that it will eventually be able to run more fancy graphics and even plan to implement a network stack and protocol if possible (foolish ambition maybe). Though those will be parts of a larger OS project rather than a kernel project. 
+Currently, the kernel code is not pushed to GitHub; it is very much in a broken state right now (it used to work fine) before I start transitioning the linker to accommodate cross-compiling with C. 
+VGA graphics work fine, although further updates to the code are needed as I transition toward C (I will only keep basic functionality, the bare minimum amount of graphics code in assembly. 
+Paging needs to transition as well, which also means I need to somehow get the linker working again. Basic high-half paging design and GDT exist from boot time, but a more advanced kernel-exclusive paging needs C.
+Keyboard drivers: Actually work fine and are mostly complete right now, although the majority of the code is in assembly.
+IDT: The most complete of them all; no update needed except for compatibility issues with C code, which means system V ABI stuff again.
+Security: Basic security features inherent to Paging and GDT exist; fancy PIE stuff? Yeah, no, not yet.
+
+Personal note: Are there no programs out there that check for ABI violations in your assembly???
+
 ---
 
 ## Contact
 
-- **Email:** PA25510289@gmail.com - It might take a few days for me to reply, I don't usually read gmail 😅😅
+- **Email:** PA25510289@gmail.com - It might take a few days for me to reply; I don't usually read Gmail except for a few specific sender 😅😅
 - **Issues:** Use [GitHub Issues](../../issues) for bug reports and technical questions.
